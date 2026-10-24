@@ -1,0 +1,65 @@
+{
+  "name": "@databuddy/setup-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plan, apply, and verify Databuddy instrumentation in a web application",
+  "license": "Apache-2.0",
+  "author": "Databuddy <support@databuddy.cc>",
+  "homepage": "https://github.com/databuddy-analytics/setup-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/databuddy-analytics/setup-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/databuddy-analytics/setup-agent/issues"
+  },
+  "keywords": [
+    "databuddy",
+    "analytics",
+    "instrumentation",
+    "codex",
+    "claude-code",
+    "agent"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@8.15.9",
+  "bin": {
+    "databuddy": "./dist/databuddy-cli.mjs"
+  },
+  "files": [
+    "dist",
+    "references",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "databuddy": "tsx src/databuddy-cli.ts",
+    "typecheck": "tsc --noEmit",
+    "bundle": "node build.mjs",
+    "test": "vitest run",
+    "test:live": "LIVE_AGENT=1 vitest run test/live-diagnosis.test.ts",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "knip": "knip",
+    "validate": "pnpm typecheck && pnpm lint && pnpm knip && pnpm bundle && pnpm test",
+    "prepack": "pnpm bundle"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.280",
+    "@biomejs/biome": "^2.4.13",
+    "@openai/codex-sdk": "0.156.1",
+    "@types/node": "^22.0.0",
+    "commander": "^13.0.0",
+    "esbuild": "^0.25.12",
+    "knip": "^6.9.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.7",
+    "zod": "^3.24.0"
+  }
+}

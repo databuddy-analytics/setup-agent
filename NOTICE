@@ -1,0 +1,17 @@
+Databuddy setup agent
+Copyright 2026 Databuddy
+
+This product is derived from DeepSec (https://github.com/vercel-labs/deepsec),
+version 2.3.10, Copyright 2026 Vercel, Inc. and contributors, licensed under
+the Apache License, Version 2.0.
+
+This product includes software developed at Vercel, Inc.
+(https://vercel.com/).
+
+Databuddy modified the original work. It removed the security-audit scanner,
+matchers, processing pipeline, sandbox orchestration, website, and audit CLI;
+kept and adapted the Codex and Claude agent adapters, retry and quota
+handling, atomic file writes, the workspace lock, and terminal redaction; and
+added the Databuddy setup, diagnose, and report workflows, schemas, product
+reference, and scan pre-pass. Files derived from DeepSec carry a header that
+names it.
