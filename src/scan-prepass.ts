@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { DatabuddyScanSummary } from "./schema.js";
@@ -39,12 +40,16 @@ function resolveScanCommand(explicit?: string): { file: string; args: string[] }
       ? { file: process.execPath, args: [bin] }
       : { file: bin, args: [] };
   }
-  const pathDirs = (process.env.PATH ?? "").split(path.delimiter);
-  for (const dir of pathDirs) {
-    const candidate = path.join(dir, "databuddy-scan");
-    if (dir && fs.existsSync(candidate)) return { file: candidate, args: [] };
-  }
-  return { file: "npx", args: ["--yes", "@databuddy/scan"] };
+  // The scanner is an exact-pinned dependency installed with this package, so
+  // a run never downloads or executes an unpinned package.
+  const manifest = createRequire(import.meta.url).resolve("@databuddy/scan/package.json");
+  const { bin: scanBin } = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
+    bin: Record<string, string>;
+  };
+  return {
+    file: process.execPath,
+    args: [path.join(path.dirname(manifest), scanBin["databuddy-scan"])],
+  };
 }
 
 export function createScanRunner(options: {

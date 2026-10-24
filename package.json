@@ -63,5 +63,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@databuddy/scan": "0.1.3"
   }
 }
