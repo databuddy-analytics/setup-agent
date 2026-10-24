@@ -83,8 +83,9 @@ Databuddy:
 - Set `AI_GATEWAY_API_KEY` in your shell to send the code to your own Vercel AI
   Gateway account instead, and Databuddy receives nothing. A key in the
   repository's `.env` is not used, because the scanner never sees that file.
-- `npx @databuddy/scan@0.1.3 --dry-run` lists every line that would be sent
-  without sending anything. Results are cached in `~/.cache/databuddy/scan`.
+- `npx @databuddy/scan@0.1.3 --dry-run` lists what would be sent without
+  sending anything. Run in your checkout, it shows a little more than the agent
+  sends, since the agent scans only its redacted snapshot. Results are cached in `~/.cache/databuddy/scan`.
 - The scanner is an exact dependency of this package (or `--scan-bin`), so
   nothing is downloaded at run time. `setup` and `diagnose` never run it.
 
@@ -127,6 +128,12 @@ edited. Edited components, server code and route handlers still run when
 your app builds or serves, so read the patch before applying it.
 
 ## Check applied edits
+
+`--apply` installs `@databuddy/sdk` with your package manager and install
+scripts disabled. The package manager still reads your registry settings
+(`.npmrc`, `bunfig.toml`, `.yarnrc.yml`). Yarn repositories that commit a Yarn
+release (`yarnPath`) or plugins are refused, because Yarn runs those on every
+command; apply the patch and install the SDK yourself there.
 
 The agent never runs your project's tools on its own, because a formatter or
 typecheck executes the project's configuration. Pass the commands you trust

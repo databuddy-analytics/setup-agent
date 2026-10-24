@@ -65,7 +65,9 @@ but it sends code to Databuddy, so it is off by default. Before running
   records only request size, counts, timing and a random run ID.
 - With their own `AI_GATEWAY_API_KEY` set, the code goes to their own Vercel
   AI Gateway account and Databuddy receives nothing.
-- `npx @databuddy/scan@0.1.3 --dry-run` shows every line that would be sent.
+- `npx @databuddy/scan@0.1.3 --dry-run` previews what would be sent. In the raw
+  checkout it shows slightly more than the agent sends, because the agent scans
+  its redacted snapshot.
 
 Add `--scan on` only if the user agrees; otherwise run `report` without it.
 Details: https://www.databuddy.cc/docs/privacy/event-scanner
