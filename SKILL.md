@@ -23,11 +23,18 @@ sensitive event properties in a request.
 
 ## Run the command
 
-Run the published package with `npx` (Node.js 22 or later). It drives the
-signed-in `codex` or `claude` CLI already on `PATH`:
+Run the published package with `npx` (Node.js 22 or later), version 0.1.2 or
+later: earlier releases did not confine the model to the redacted snapshot. It
+drives the signed-in `codex` or `claude` CLI already on `PATH`.
+
+Before the first run, tell the user that a redacted copy of their source goes
+to the model provider behind that CLI (OpenAI for Codex, Anthropic for Claude)
+under their own login, and that
+`npx @databuddy/setup-agent@^0.1.2 snapshot <repository> --out <dir>` shows exactly
+what would be sent. Run it only once they agree.
 
 ```bash
-npx @databuddy/setup-agent setup /path/to/next-app \
+npx @databuddy/setup-agent@^0.1.2 setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project"
 ```
