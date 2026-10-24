@@ -41,6 +41,8 @@ describe("run telemetry", () => {
     const sent = JSON.stringify(payload);
     expect(payload.status).toBe("failed");
     expect(payload.issues).toEqual([{ type: "review_rejected", resolved: false }]);
+    // Error text can quote source, so a failure carries only its code.
+    expect(payload).not.toHaveProperty("errorMessage");
     expect(sent).not.toContain(root);
     expect(sent).not.toContain("billing");
     expect(sent).not.toContain("sk-live");

@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { describeError } from "./protocol.js";
@@ -90,14 +89,6 @@ function issueCode(message: string): string {
   return ISSUE_PATTERNS.find(([pattern]) => pattern.test(message))?.[1] ?? "error";
 }
 
-/** First line only, with paths and credentials removed. */
-function sanitizeMessage(message: string, repository?: string): string {
-  let line = message.split("\n")[0] ?? "";
-  if (repository) line = line.replaceAll(repository, "<repo>");
-  line = line.replaceAll(os.homedir(), "~").replace(/(?:~|<repo>|\.{0,2})?\/[^\s,;:)]+/g, "<path>");
-  return createSetupRedactor()(line).slice(0, 500);
-}
-
 interface TelemetryPayload {
   websiteId: string;
   agent: string;
@@ -107,7 +98,6 @@ interface TelemetryPayload {
   durationMs?: number;
   stepsCompleted?: string[];
   issues?: { type: string; detail?: string; resolved?: boolean }[];
-  errorMessage?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -173,12 +163,11 @@ export function runPayload(input: {
       issues.push({ type: "area_incomplete", detail: `${incomplete} area(s)`, resolved: false });
     }
   }
-  let errorMessage: string | undefined;
+  // Failures are reported only as a typed code: error text can quote source
+  // (a reviewer's issue cites code), so none of it leaves the machine.
   if (input.error !== undefined) {
     status = "failed";
-    const message = describeError(input.error);
-    errorMessage = sanitizeMessage(message, input.repository);
-    issues.push({ type: issueCode(message), resolved: false });
+    issues.push({ type: issueCode(describeError(input.error)), resolved: false });
   }
   return {
     websiteId: input.websiteId,
@@ -189,7 +178,6 @@ export function runPayload(input: {
     durationMs: input.durationMs,
     ...(steps.length ? { stepsCompleted: steps } : {}),
     ...(issues.length ? { issues } : {}),
-    ...(errorMessage ? { errorMessage } : {}),
     metadata,
   };
 }
