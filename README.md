@@ -88,6 +88,11 @@ Databuddy:
   sends, since the agent scans only its redacted snapshot. Results are cached in `~/.cache/databuddy/scan`.
 - The scanner is an exact dependency of this package (or `--scan-bin`), so
   nothing is downloaded at run time. `setup` and `diagnose` never run it.
+- Its source is public at
+  [databuddy-analytics/scan](https://github.com/databuddy-analytics/scan);
+  `src/evaluate.ts` there builds every request it sends. The pinned 0.1.3 was
+  built before that repository existed, so it cannot be rebuilt from it; later
+  releases are published from it with npm provenance and an unminified bundle.
 
 [How the scanner handles your code](https://www.databuddy.cc/docs/privacy/event-scanner).
 
