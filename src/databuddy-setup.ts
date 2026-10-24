@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import packageJson from "../package.json" with { type: "json" };
@@ -368,13 +369,15 @@ function installedSdk(repository: string): string | undefined {
  * The command that adds the SDK as a runtime dependency with install scripts
  * disabled, for the package manager the repository uses.
  */
-export function sdkInstallCommand(
-  repository: string,
-  yarnVersion: () => string = () =>
-    execFileSync("yarn", ["--version"], { cwd: repository, encoding: "utf8" }).trim(),
-): { file: string; args: string[]; env?: Record<string, string> } {
+export function sdkInstallCommand(repository: string): {
+  file: string;
+  args: string[];
+  env?: Record<string, string>;
+} {
   const configured = manifest(repository).packageManager;
   const has = (file: string) => fs.existsSync(path.join(repository, file));
+  const read = (file: string) =>
+    has(file) ? fs.readFileSync(path.join(repository, file), "utf8") : "";
   const manager =
     typeof configured === "string"
       ? configured.split("@")[0]
@@ -398,17 +401,23 @@ export function sdkInstallCommand(
     throw new Error(
       `Automatic SDK installation supports npm, pnpm, bun and yarn, not ${manager}. Install @databuddy/sdk yourself, then rerun --apply.`,
     );
+  const yarnrc = read(".yarnrc.yml");
+  // Yarn runs a committed yarnPath release and loads .yarnrc.yml plugins on
+  // every command, which disabling install scripts does not stop.
+  if (/^\s*(?:yarnPath|plugins)\s*:/m.test(yarnrc) || /^\s*yarn-path\s/m.test(read(".yarnrc")))
+    throw new Error(
+      "This repository's Yarn config runs a committed Yarn release or plugins, so --apply will not run Yarn in it. Run --patch, apply the patch, and add @databuddy/sdk yourself.",
+    );
   const version =
     typeof configured === "string" && configured.includes("@")
       ? configured.split("@")[1]
-      : yarnVersion();
+      : read("yarn.lock").includes("__metadata:")
+        ? "2"
+        : "1";
   if (Number(version.split(".")[0]) <= 1)
     return { file: "yarn", args: ["add", sdk, "--ignore-scripts"] };
   // Yarn 2+ installs with Plug'n'Play unless nodeLinker is node-modules, and
   // without node_modules the installed SDK cannot be verified.
-  const yarnrc = has(".yarnrc.yml")
-    ? fs.readFileSync(path.join(repository, ".yarnrc.yml"), "utf8")
-    : "";
   if (has(".pnp.cjs") || !/^\s*nodeLinker:\s*["']?node-modules/m.test(yarnrc))
     throw new Error(
       "Yarn Plug'n'Play projects are not supported by --apply yet. Run --patch, apply the patch, and add @databuddy/sdk yourself.",
@@ -590,6 +599,9 @@ function candidateDiff(temporary: string, snapshot: string, changes: ApplyChange
       encoding: "utf8",
       stdio: "pipe",
       maxBuffer: 20 * 1024 * 1024,
+      // The user's git config (color, prefixes, diff drivers) must not change
+      // the patch the reviewer and the hunk gate read.
+      env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1" },
     });
   command(["add", "--all", "--force", "--", "."]);
   const created: string[] = [];
@@ -602,7 +614,15 @@ function candidateDiff(temporary: string, snapshot: string, changes: ApplyChange
     fs.chmodSync(target, 0o400);
   }
   if (created.length) command(["add", "--intent-to-add", "--force", "--", ...created]);
-  return command(["diff", "--no-ext-diff", "--no-textconv", "--"]);
+  return command([
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+    "--",
+  ]);
 }
 
 /**
@@ -648,7 +668,9 @@ export function enforceHunkReview(
   const issues = [...review.issues];
   for (const hunk of hunks) {
     const entry = marked.get(hunk.id);
-    if (entry && !entry.related)
+    if (!entry)
+      issues.push(`${hunk.location} (${hunk.id}): the review did not classify this change`);
+    else if (!entry.related)
       issues.push(
         `${hunk.location}: remove this change; the requested setup does not need it (${entry.purpose})`,
       );
@@ -1085,7 +1107,13 @@ export async function runDatabuddySetup(
         }
       }
       const diff = candidateDiff(temporary, snapshot, changes);
+      if (pending?.savedPatchHash && digest(diff) !== pending.savedPatchHash)
+        throw new Error(
+          "The saved setup changes no longer match the reviewed .databuddy/setup.patch; nothing was applied. Rerun with --patch to regenerate it.",
+        );
       const hunks = diffHunks(diff);
+      if (!hunks.length && changes.length)
+        throw new Error("The proposed changes produced no reviewable diff; nothing was applied");
       const proposal: ReviewCheckpoint = pending ?? {
         version: 1,
         status: "reviewing",
@@ -1102,8 +1130,12 @@ export async function runDatabuddySetup(
         type: "started",
         message: "Independently reviewing proposed SDK and custom-event source changes",
       });
+      const reusable =
+        proposal.sourceReview && proposal.reviewedDiffHash === digest(diff)
+          ? proposal.sourceReview
+          : undefined;
       const review =
-        proposal.sourceReview ??
+        reusable ??
         enforceHunkReview(
           DatabuddySetupSourceReviewSchema.parse(
             parseJson(
@@ -1118,7 +1150,7 @@ export async function runDatabuddySetup(
           hunks,
         );
       options.signal?.throwIfAborted();
-      save({ ...proposal, sourceReview: review });
+      save({ ...proposal, sourceReview: review, reviewedDiffHash: digest(diff) });
       pending = undefined;
       if (!review.passed) {
         if (lastAttempt(attempt)) {
@@ -1144,7 +1176,12 @@ export async function runDatabuddySetup(
       // The reviewing checkpoint already holds the passed review, so a later
       // --apply applies exactly this patch without another model call.
       if (options.patchOnly) {
-        save({ ...proposal, sourceReview: review, savedPatchHash: digest(diff) });
+        save({
+          ...proposal,
+          sourceReview: review,
+          reviewedDiffHash: digest(diff),
+          savedPatchHash: digest(diff),
+        });
         return DatabuddySetupResultSchema.parse({
           ...result,
           patch: {

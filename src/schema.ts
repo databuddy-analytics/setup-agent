@@ -320,6 +320,8 @@ export const DatabuddySetupCheckpointSchema = z
       // Set by --patch: a person may have reviewed this exact diff, so --apply
       // must apply it unchanged or refuse, never re-plan.
       savedPatchHash: hashSchema.optional(),
+      // The diff the saved sourceReview passed; a review never vouches for other edits.
+      reviewedDiffHash: hashSchema.optional(),
     }),
     journalSchema.extend({ status: z.literal("applying") }),
     journalSchema.extend({ status: z.literal("applied") }),

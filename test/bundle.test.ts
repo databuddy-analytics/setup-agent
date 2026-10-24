@@ -161,7 +161,12 @@ describe("bundle e2e", () => {
           unknowns: ["Live delivery is unverified"],
         },
         { changes: [{ product: "sdk", path: "app.tsx", content: after }] },
-        { passed: true, issues: [], unknowns: ["App build and live delivery are unverified"] },
+        {
+          passed: true,
+          issues: [],
+          unknowns: ["App build and live delivery are unverified"],
+          hunks: [{ id: "H1", related: true, purpose: "mounts the SDK" }],
+        },
       ];
       await expect(
         runDatabuddySetup({

@@ -150,6 +150,11 @@ function sourceReview(): DatabuddySetupSourceReview {
     passed: true,
     issues: [],
     unknowns: ["Runtime event delivery and website access remain unverified"],
+    hunks: Array.from({ length: 8 }, (_, index) => ({
+      id: `H${index + 1}`,
+      related: true,
+      purpose: "adds the planned tracking",
+    })),
   };
 }
 
@@ -176,6 +181,7 @@ function state(repository: string): { status: string; result?: unknown } {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const repository of roots.splice(0)) {
     fs.rmSync(repository, { recursive: true, force: true });
   }
@@ -733,7 +739,15 @@ describe("Databuddy setup implementation", () => {
   });
 
   it("refuses to apply anything but the exact reviewed patch", async () => {
-    for (const change of ["source", "patch"] as const) {
+    // A user git config must not change the patch a person reviews.
+    const gitConfig = path.join(fixture(), "gitconfig");
+    write(
+      path.dirname(gitConfig),
+      "gitconfig",
+      "[color]\n\tdiff = always\n[diff]\n\tnoprefix = true\n",
+    );
+    vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+    for (const change of ["source", "patch", "checkpoint"] as const) {
       const repository = fixture();
       const runTask: RunTask = async ({ prompt }) => {
         if (prompt.startsWith("Generate the smallest")) return JSON.stringify(implementation());
@@ -741,9 +755,19 @@ describe("Databuddy setup implementation", () => {
         return JSON.stringify(plan());
       };
       await runDatabuddySetup({ repository, request, apply: true, patchOnly: true, runTask });
+      const patch = fs.readFileSync(path.join(repository, ".databuddy/setup.patch"), "utf8");
+      expect(patch).not.toContain("\u001b[");
+      expect(patch).toContain("diff --git a/app/actions.ts b/app/actions.ts");
       // A person reviewed .databuddy/setup.patch; then something changed.
       if (change === "source") write(repository, "README.md", "Edited after review\n");
-      else fs.appendFileSync(path.join(repository, ".databuddy/setup.patch"), "\n# edited\n");
+      else if (change === "patch")
+        fs.appendFileSync(path.join(repository, ".databuddy/setup.patch"), "\n# edited\n");
+      else {
+        const file = path.join(repository, ".databuddy/setup.json");
+        const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+        saved.changes[0].content += "\nfetch('https://example.invalid/x');\n";
+        fs.writeFileSync(file, JSON.stringify(saved));
+      }
       const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
       await expect(
         runDatabuddySetup({
@@ -757,7 +781,13 @@ describe("Databuddy setup implementation", () => {
             throw new Error("A refused patch must not install dependencies");
           },
         }),
-      ).rejects.toThrow(change === "source" ? "different source or options" : "edited or removed");
+      ).rejects.toThrow(
+        {
+          source: "different source or options",
+          patch: "edited or removed",
+          checkpoint: "no longer match the reviewed",
+        }[change],
+      );
       expect(fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8")).toBe(actionsBefore);
       expect(fs.existsSync(path.join(repository, "app/analytics.ts"))).toBe(false);
     }
@@ -1261,34 +1291,37 @@ describe("planned event coverage", () => {
 });
 
 describe("SDK install command", () => {
-  it("disables install scripts for every supported package manager and refuses Plug'n'Play", () => {
+  it("disables install scripts, never runs repository Yarn code and refuses Plug'n'Play", () => {
     const repository = fixture();
-    const noVersion = () => {
-      throw new Error("yarn --version should not run");
-    };
     write(repository, "pnpm-lock.yaml", "");
     expect(sdkInstallCommand(repository).args).toEqual(
       expect.arrayContaining(["--ignore-scripts", "--ignore-pnpmfile"]),
     );
     fs.rmSync(path.join(repository, "pnpm-lock.yaml"));
-    write(repository, "yarn.lock", "");
-    expect(sdkInstallCommand(repository, () => "1.22.22")).toEqual({
+    write(repository, "yarn.lock", "# yarn lockfile v1\n");
+    expect(sdkInstallCommand(repository)).toEqual({
       file: "yarn",
       args: ["add", "@databuddy/sdk@^3", "--ignore-scripts"],
     });
-    write(
-      repository,
-      "package.json",
-      JSON.stringify({ packageManager: "yarn@4.5.3", dependencies: { next: "fixture" } }),
-    );
-    expect(() => sdkInstallCommand(repository, noVersion)).toThrow("Plug'n'Play");
+    write(repository, ".yarnrc", 'yarn-path ".yarn/releases/yarn-1.22.22.cjs"\n');
+    expect(() => sdkInstallCommand(repository)).toThrow("committed Yarn release");
+    fs.rmSync(path.join(repository, ".yarnrc"));
+    write(repository, "yarn.lock", "__metadata:\n  version: 8\n");
+    expect(() => sdkInstallCommand(repository)).toThrow("Plug'n'Play");
     write(repository, ".yarnrc.yml", "nodeLinker: node-modules\n");
-    expect(sdkInstallCommand(repository, noVersion)).toEqual({
+    expect(sdkInstallCommand(repository)).toEqual({
       file: "yarn",
       args: ["add", "@databuddy/sdk@^3", "--mode=skip-build"],
       env: { YARN_ENABLE_SCRIPTS: "0" },
     });
+    write(
+      repository,
+      ".yarnrc.yml",
+      "nodeLinker: node-modules\nyarnPath: .yarn/releases/yarn-4.5.3.cjs\n",
+    );
+    expect(() => sdkInstallCommand(repository)).toThrow("committed Yarn release");
+    write(repository, ".yarnrc.yml", "nodeLinker: node-modules\n");
     write(repository, ".pnp.cjs", "");
-    expect(() => sdkInstallCommand(repository, noVersion)).toThrow("Plug'n'Play");
+    expect(() => sdkInstallCommand(repository)).toThrow("Plug'n'Play");
   });
 });
