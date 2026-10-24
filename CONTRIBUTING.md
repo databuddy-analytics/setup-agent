@@ -26,6 +26,14 @@ disposable copy of a real or synthetic Next.js app. Planning must leave
 source unchanged. For `--apply`, verify reviewed edits, SDK installation,
 interruption recovery, and refusal to overwrite later source changes.
 
+## Releasing
+
+Bump `version` in `package.json`, push to `main`, then start the Release
+workflow from the Actions tab. It runs `pnpm validate` and publishes with npm
+provenance, so each version can be traced to the commit that built it. Before
+the first run, register this repository and `release.yml` as a trusted
+publisher for `@databuddy/setup-agent` on npmjs.com.
+
 ## Ownership
 
 - `src/schema.ts` owns request, plan, result, and checkpoint schemas.
