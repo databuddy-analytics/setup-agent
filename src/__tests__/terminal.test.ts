@@ -1,7 +1,11 @@
 // Derived from DeepSec (https://github.com/vercel-labs/deepsec), Copyright 2026 Vercel, Inc.
 // and contributors, licensed under Apache-2.0. Modified by Databuddy; see NOTICE.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { isSourcePath } from "../repository-snapshot.js";
+import { isSourcePath, readSource } from "../repository-snapshot.js";
 import { createSetupRedactor, normalizeTerminalLine } from "../terminal.js";
 
 describe("terminal output", () => {
@@ -59,15 +63,54 @@ describe("terminal output", () => {
     expect(redact(ordinary)).toBe(ordinary);
   });
 
+  it("redacts unquoted config secrets, secret-named code values and random-looking literals", () => {
+    const redact = createSetupRedactor({});
+    const fake = (...parts: string[]) => parts.join("");
+    const awsSecret = fake("wJalrXUtnFEMI/K7MDENG", "/bPxRfiCYzEXAMPLEKEY9");
+    const mailgun = fake("key-", "3ax6xnjp29jd6fds4gc373sgvjxteol0");
+    const leaks = [
+      `  password: ${fake("hunter2", "Hunter2hunter")}`,
+      `DB_PASSWORD=${fake("s3cr3t", "-value-123")}`,
+      `const dbPass = "${fake("pa55", "word123x")}";`,
+      `const mailgun = "${mailgun}";`,
+      `export const region = { id: "${awsSecret}" };`,
+    ];
+    const output = redact(leaks.join("\n"));
+    for (const secret of ["hunter2", "s3cr3t", "pa55", mailgun, awsSecret])
+      expect(output).not.toContain(secret);
+    const ordinary = [
+      'const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";',
+      'const STORAGE_KEY = "databuddy_token";',
+      'const url = "https://api.databuddy.cc/v1/mcp";',
+      '<div className="flex items-center gap-2 rounded-md">',
+      'const id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";',
+      "apiKey: process.env.STRIPE_SECRET_KEY,",
+    ].join("\n");
+    expect(redact(ordinary)).toBe(ordinary);
+  });
+
   it("keeps key and credential files out of the snapshot by name", () => {
     for (const file of [
       "src/keys.ts",
       "lib/key.json",
       "config/service-account.json",
       "src/api-keys.ts",
+      "src/pricing.test.ts",
+      "app/checkout.spec.tsx",
     ])
       expect(isSourcePath(file), file).toBe(false);
     for (const file of ["src/lib/query-keys.ts", "src/app/keyboard.tsx", "src/config.ts"])
       expect(isSourcePath(file), file).toBe(true);
+  });
+
+  it("drops service-account key files by their contents, whatever their name", () => {
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-service-account-"));
+    fs.writeFileSync(
+      path.join(repository, "firebase-adminsdk-x1.json"),
+      JSON.stringify({ type: "service_account", project_id: "synthetic", private_key_id: "0123" }),
+    );
+    fs.writeFileSync(path.join(repository, "app.ts"), "export const ok = true;\n");
+    const contents = readSource(repository, ["firebase-adminsdk-x1.json", "app.ts"]);
+    expect([...contents.keys()]).toEqual(["app.ts"]);
   });
 });

@@ -147,17 +147,22 @@ login. `--agent claude` switches to Claude Code, and `--model-auth api-key`
 bills `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` instead of a subscription.
 [Models](docs/models.md) lists the defaults and credential checks.
 
-The selected model provider receives a temporary snapshot of your source,
+The selected model provider reads a temporary snapshot of your source,
 manifests, and Markdown. Hidden files (including every `.env`), dependencies,
-build output, tests, lockfiles, symlinks, and credential or key files (such as
-`secrets.ts`, `keys.ts` or `service-account.json`) are excluded. In every file
-that remains, the agent redacts credential values from your environment,
-private key blocks, and keys in the formats AWS, GitHub, Stripe, Slack,
-Google, npm, Resend, OpenAI, Anthropic, Vercel and Databuddy use, as well as
-JWTs, passwords in URLs, and long quoted values assigned to secret-named keys
-such as `apiKey: "..."`. Detection is pattern-based, so a secret in a format
-it does not recognise can still reach the provider; only run the agent on
-code you allow that provider to read.
+build output, test files and directories, lockfiles, symlinks, credential or
+key files (such as `secrets.ts`, `keys.ts` or `service-account.json`), and any
+service-account key JSON whatever its name are excluded. In every file that
+remains, the agent redacts credential values from your environment, private
+key blocks, keys in the formats AWS, GitHub, Stripe, Slack, Google, npm,
+Resend, Mailgun, OpenAI, Anthropic, Vercel and Databuddy use, JWTs, passwords
+in URLs, values assigned to secret-named keys and identifiers (quoted in code
+such as `apiKey: "..."` or `const dbPass = "..."`, unquoted in YAML, TOML and
+env files), and random-looking quoted strings of 32 or more characters.
+Detection is pattern-based, so a secret in a format it does not recognise can
+still reach the provider; only run the agent on code you allow that provider
+to read. The model can read only that snapshot: Codex runs under a permission
+profile that denies every other path, and Claude's file tools refuse paths
+outside it.
 The agent never loads the target's environment files or executes its
 configuration.
 

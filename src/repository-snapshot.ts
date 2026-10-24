@@ -61,7 +61,9 @@ export function isSourcePath(relative: string): boolean {
     !/(?:^|[._-])(?:credentials?|secrets?|tokens?|passwords?|api[-_]?keys?|private[-_]?keys?|service[-_]?accounts?)(?:[._-]|$)/i.test(
       path.basename(relative),
     ) &&
-    !/^keys?\./i.test(path.basename(relative))
+    !/^keys?\./i.test(path.basename(relative)) &&
+    // Tests often hold realistic fixtures and are not instrumentation targets.
+    !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(relative)
   );
 }
 
@@ -106,6 +108,8 @@ export function readSource(repository: string, files: string[]): Map<string, str
     }
     const source = fs.readFileSync(absolute, "utf8");
     if (source.includes("\0")) continue;
+    // Cloud service-account keys are JSON with any file name.
+    if (/"type"\s*:\s*"service_account"/.test(source)) continue;
     totalBytes += size;
     contents.set(relative, source);
   }

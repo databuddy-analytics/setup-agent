@@ -32,6 +32,7 @@ const TOKEN_PATTERNS: RegExp[] = [
   /\bAIza[0-9A-Za-z_-]{35}\b/g,
   /\bnpm_[A-Za-z0-9]{36}\b/g,
   /\bre_[A-Za-z0-9]{8}_[A-Za-z0-9]{20,}\b/g,
+  /\bkey-[0-9a-f]{32}\b/g,
 ];
 
 // Patterns that keep a prefix (the URL scheme and user, or the key name).
@@ -42,7 +43,42 @@ const PREFIXED_PATTERNS: [RegExp, string][] = [
     /((?:secret|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|token|password|passwd)["']?\s*[:=]\s*["'`])[^"'`\s]{16,}(?=["'`])/gi,
     "$1[REDACTED]",
   ],
+  // An identifier naming a secret (dbPass, stripeSecret, apiToken) assigned a
+  // quoted value that mixes letters and digits.
+  [
+    /(\b[\w$]*(?:pass(?:word|wd)?|pwd|secret|token|api_?key|access_?key|private_?key|credential)[\w$]*["']?\s*[:=]\s*["'`])(?=[^"'`\s]*\d)(?=[^"'`\s]*[A-Za-z])[^"'`\s]{10,}(?=["'`])/gi,
+    "$1[REDACTED]",
+  ],
+  // Unquoted values for secret-named keys in YAML, TOML, INI and env files.
+  [
+    /^(\s*[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*\s*[:=]\s*)(?!["'`$({]|(?:process|import|Deno|Bun)\.)([^\s,;()]{8,})\s*$/gim,
+    "$1[REDACTED]",
+  ],
 ];
+
+// Random-looking quoted values of 32+ characters, such as a cloud secret on an
+// innocently named key. Hex digests top out at 4 bits per character, below the
+// threshold, so hashes and IDs stay readable.
+const HIGH_ENTROPY_LITERAL = /(["'`])([A-Za-z0-9+/=_-]{32,})\1/g;
+
+function entropy(value: string): number {
+  const counts = new Map<string, number>();
+  for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
+  let bits = 0;
+  for (const count of counts.values()) {
+    const share = count / value.length;
+    bits -= share * Math.log2(share);
+  }
+  return bits;
+}
+
+function redactHighEntropy(input: string): string {
+  return input.replace(HIGH_ENTROPY_LITERAL, (match, quote: string, value: string) =>
+    /\d/.test(value) && /[A-Za-z]/.test(value) && !value.startsWith("/") && entropy(value) >= 4.3
+      ? `${quote}[REDACTED]${quote}`
+      : match,
+  );
+}
 
 /** Redact credential-named environment values, provider key formats and secret assignments. */
 export function createSetupRedactor(
@@ -63,6 +99,7 @@ export function createSetupRedactor(
     for (const pattern of TOKEN_PATTERNS) output = output.replace(pattern, "[REDACTED]");
     for (const [pattern, replacement] of PREFIXED_PATTERNS)
       output = output.replace(pattern, replacement);
+    output = redactHighEntropy(output);
     return output;
   };
 }
