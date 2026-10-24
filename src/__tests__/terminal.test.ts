@@ -11,6 +11,7 @@ import {
   exportSnapshot,
   isSourcePath,
   readSource,
+  sourceFiles,
 } from "../repository-snapshot.js";
 import { createSetupRedactor, normalizeTerminalLine } from "../terminal.js";
 
@@ -107,8 +108,25 @@ describe("terminal output", () => {
       gitlab,
     ])
       expect(redactedMore).not.toContain(secret);
+    // Formats a third review showed reaching the model.
+    const hexKey = fake("a1b2c3d4", "e5f60718".repeat(7));
+    const third = [
+      "    environment:",
+      `      - POSTGRES_PASSWORD=${fake("compose", "pw1")}`,
+      `      - AWS_SECRET_ACCESS_KEY=${awsSecret}`,
+      `DB_PASS: ${fake("Hunter2", "Hunter2")}`,
+      `url: postgres://admin:${fake("pa/ss", "@word")}@db.internal:5432/app`,
+      `key: ${hexKey}`,
+    ].join("\n");
+    const redactedThird = redact(third);
+    for (const secret of ["composepw1", awsSecret, "Hunter2Hunter2", "pa/ss", "word@", hexKey])
+      expect(redactedThird).not.toContain(secret);
+    expect(redactedThird).toContain("@db.internal:5432/app");
     const ordinary = [
       'const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";',
+      "const profile = 'http://localhost:3000/@user';",
+      "compass: northwest",
+      "const options = { pass: true };",
       'const STORAGE_KEY = "databuddy_token";',
       'const url = "https://api.databuddy.cc/v1/mcp";',
       '<div className="flex items-center gap-2 rounded-md">',
@@ -131,6 +149,18 @@ describe("terminal output", () => {
       expect(isSourcePath(file), file).toBe(false);
     for (const file of ["src/lib/query-keys.ts", "src/app/keyboard.tsx", "src/config.ts"])
       expect(isSourcePath(file), file).toBe(true);
+  });
+
+  it("leaves out files the repository ignores only in .git/info/exclude", () => {
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-info-exclude-"));
+    execFileSync("git", ["init", "--quiet"], { cwd: repository });
+    fs.mkdirSync(path.join(repository, "src"));
+    fs.writeFileSync(path.join(repository, "src/app.ts"), "export {};\n");
+    fs.writeFileSync(path.join(repository, "src/local-only.ts"), "export {};\n");
+    fs.appendFileSync(path.join(repository, ".git/info/exclude"), "src/local-only.ts\n");
+    const gitDir = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-info-exclude-index-"));
+    execFileSync("git", ["init", "--bare", "--quiet", gitDir]);
+    expect(sourceFiles(repository, gitDir)).toEqual(["src/app.ts"]);
   });
 
   it("drops service-account key files by their contents, whatever their name", () => {

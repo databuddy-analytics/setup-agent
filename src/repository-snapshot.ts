@@ -67,6 +67,23 @@ export function isSourcePath(relative: string): boolean {
   );
 }
 
+/** The repository's own .git/info/exclude, which a temporary index does not read. */
+function repositoryExclude(repository: string): string[] {
+  try {
+    const file = path.resolve(
+      repository,
+      execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], {
+        cwd: repository,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    );
+    return fs.existsSync(file) ? [`--exclude-from=${file}`] : [];
+  } catch {
+    return [];
+  }
+}
+
 export function sourceFiles(repository: string, gitDir: string): string[] {
   // A temporary index honors .gitignore even for directories without a Git checkout.
   const inventory = execFileSync(
@@ -80,6 +97,7 @@ export function sourceFiles(repository: string, gitDir: string): string[] {
       "-z",
       "--others",
       "--exclude-standard",
+      ...repositoryExclude(repository),
     ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 10 * 1024 * 1024 },
   );

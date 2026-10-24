@@ -41,7 +41,12 @@ const TOKEN_PATTERNS: RegExp[] = [
 
 // Patterns that keep a prefix (the URL scheme and user, or the key name).
 const PREFIXED_PATTERNS: [RegExp, string][] = [
-  [/([a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:)[^\s/@]+@/gi, "$1[REDACTED]@"],
+  // Passwords can contain / and @, so the password ends at the first @ that
+  // is followed by a host. A port and path such as localhost:3000/@user is left alone.
+  [
+    /([a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:)(?!\d+\/)[^\s"'`]+?@(?=[^\s/@?#"'`]+(?:[/?#:\s"'`]|$))/gim,
+    "$1[REDACTED]@",
+  ],
   // A quoted, space-free value of 16+ characters assigned to a secret-named key.
   [
     /((?:secret|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|token|password|passwd)["']?\s*[:=]\s*["'`])[^"'`\s]{16,}(?=["'`])/gi,
@@ -72,9 +77,16 @@ const PREFIXED_PATTERNS: [RegExp, string][] = [
   [/(\b(?:Password|Pwd|AccountKey|SharedAccessKey)\s*=\s*)[^;"'\s]+/gi, "$1[REDACTED]"],
   // Unquoted values for secret-named keys in YAML, TOML, INI and env files.
   [
-    /^(\s*[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*\s*[:=]\s*)(?!["'`$({]|(?:process|import|Deno|Bun)\.)([^\s,;()]{8,})\s*$/gim,
+    /^(\s*(?:-\s+)?(?:[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*|(?:[\w.-]*[_.-])?pass(?:[_.-][\w.-]*)?)\s*[:=]\s*)(?!["'`$({]|(?:process|import|Deno|Bun)\.)([^\s,;()]{6,})\s*$/gim,
     "$1[REDACTED]",
   ],
+  // Long hex or base64 values on any key-named field, quoted or not: hex
+  // secrets sit below the entropy threshold.
+  [
+    /^(\s*(?:-\s+)?[\w.-]*key\s*[:=]\s*["'`]?)(?:[A-Fa-f0-9]{32,}|(?=[A-Za-z0-9+/_-]*\d)[A-Za-z0-9+/_-]{32,}={0,2})(?=["'`]?\s*$)/gim,
+    "$1[REDACTED]",
+  ],
+  [/(\b[\w$]*key["']?\s*[:=]\s*["'`])[A-Fa-f0-9]{32,}(?=["'`])/gi, "$1[REDACTED]"],
 ];
 
 // Random-looking quoted values of 32+ characters, such as a cloud secret on an
