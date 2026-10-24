@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runDatabuddySetup } from "../databuddy-setup.js";
+import { enforceHunkReview, runDatabuddySetup } from "../databuddy-setup.js";
 import type {
   DatabuddySetupChanges,
   DatabuddySetupPlan,
@@ -1084,5 +1084,29 @@ describe("Databuddy setup implementation", () => {
       expect(fs.existsSync(path.join(repository, "app/analytics.ts"))).toBe(false);
       expect(state(repository).status).toBe("applying");
     }
+  });
+});
+
+describe("source review hunk accounting", () => {
+  it("rejects a passing review that marks an unrelated restyle, keeping the planned hunks", () => {
+    const review = enforceHunkReview(
+      {
+        passed: true,
+        issues: [],
+        unknowns: ["Live delivery remains unverified"],
+        hunks: [
+          { id: "H1", related: true, purpose: "mounts the tracker in the root layout" },
+          { id: "H2", related: false, purpose: "adds backdrop-blur-none to the cart modal" },
+        ],
+      },
+      [
+        { id: "H1", location: "app/layout.tsx:34" },
+        { id: "H2", location: "components/cart/modal.tsx:72" },
+      ],
+    );
+    expect(review.passed).toBe(false);
+    expect(review.issues).toEqual([
+      "components/cart/modal.tsx:72: remove this change; the requested setup does not need it (adds backdrop-blur-none to the cart modal)",
+    ]);
   });
 });

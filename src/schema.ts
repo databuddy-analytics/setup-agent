@@ -184,6 +184,17 @@ export const DatabuddySetupSourceReviewSchema = z
     passed: z.boolean(),
     issues: z.array(reviewIssueSchema).max(40),
     unknowns: z.array(z.string().trim().min(1).max(2_000)).max(40),
+    // The reviewer's purpose for each diff hunk; unrelated hunks become issues.
+    hunks: z
+      .array(
+        z.object({
+          id: z.string().regex(/^H\d{1,4}$/),
+          related: z.boolean(),
+          purpose: z.string().trim().min(1).max(500),
+        }),
+      )
+      .max(400)
+      .optional(),
   })
   .strict()
   .refine((review) => review.passed === (review.issues.length === 0), {
