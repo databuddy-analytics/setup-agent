@@ -40,7 +40,8 @@ npx @databuddy/setup-agent setup /path/to/next-app \
 
 Review the proposed changes, source references, verification steps, and
 unknowns. A completed plan does not mean the SDK is installed or that events
-have arrived. Unsupported frameworks stop before an agent call.
+have arrived. Planning works for every detected framework; `--patch` and
+`--apply` implement Next.js only and stop before any model call elsewhere.
 
 ## Choose the products
 

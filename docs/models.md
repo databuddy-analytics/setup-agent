@@ -35,6 +35,11 @@ command rather than running unconfined. There, use `--agent claude`, whose
 file access is checked inside the agent, or run the container with
 `--security-opt seccomp=unconfined`.
 
+Codex runs each command in a plain, non-login shell with shell snapshots
+off, so your profile's exported variables never enter it. Claude runs with no
+user or project settings loaded and keeps no session transcript in
+`~/.claude/projects`.
+
 Accepted reasoning levels are `minimal`, `low`, `medium`, `high`, and
 `xhigh`. Each backend maps them to its own reasoning control.
 

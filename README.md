@@ -50,12 +50,19 @@ npx @databuddy/setup-agent diagnose /path/to/repository \
   --scope apps/web
 ```
 
-Each command writes one JSON artifact to stdout and redacted progress to
-stderr, and saves an atomic checkpoint under `<repository>/.databuddy/`.
+On success, each command writes one JSON artifact to stdout; progress and
+errors go to stderr, redacted, and a failed run writes nothing to stdout. Each
+saves an atomic checkpoint under `<repository>/.databuddy/`.
 Repeating a command with unchanged source and options returns the saved
 result without a model call; an interrupted run resumes the work it has
 not finished. Private task records, including redacted prompts and usage,
-stay in `.databuddy/runs/`. Add `.databuddy/` to the target's `.gitignore`.
+stay in `.databuddy/runs/`. In a Git repository the agent adds `.databuddy/`
+to the local, uncommitted `.git/info/exclude`, so it is never committed by
+accident; your `.gitignore` is not changed.
+
+`databuddy snapshot <repository> --out <dir>` writes exactly the filtered,
+redacted files a model task would read, and lists the files redaction
+changed, without any model call, so you can audit what would be sent first.
 
 ### The optional action scan
 
@@ -111,10 +118,13 @@ asking. It uses the agent's own `mcp add` command and leaves an existing
 saves the result to `.databuddy/setup.patch` without installing the SDK or
 touching your source. Read the patch, then run the same command with `--apply`
 in place of `--patch` to apply exactly that reviewed patch with no further
-model calls. Edits are limited to component and module code (`.ts`, `.tsx`,
-`.js`, `.jsx`, `.vue`, `.svelte`, `.astro`); config files, middleware,
-instrumentation, scripts, and JSON, YAML or TOML files are never edited, so
-nothing the model writes runs at build or start time on its own.
+model calls. If the source, the options or the patch file changed since
+`--patch`, `--apply` refuses and changes nothing; rerun `--patch` and review
+the new patch. Edits are limited to component and module code (`.ts`,
+`.tsx`, `.js`, `.jsx`, `.vue`, `.svelte`, `.astro`); config files,
+middleware, instrumentation, scripts, and JSON, YAML or TOML files are never
+edited. Edited components, server code and route handlers still run when
+your app builds or serves, so read the patch before applying it.
 
 ## Check applied edits
 
@@ -143,16 +153,19 @@ ID, so it is not anonymous. It contains exactly:
   run duration;
 - the outcome, the steps that completed, and typed issue codes such as
   `review_rejected` or `sdk_install_failed`;
-- the first line of any error, with file paths and credentials removed;
+- for a failure, only its issue code, never the error text (which can quote
+  code);
 - the framework, package manager, and which of a fixed list of well-known
   packages you use (for example `next`, `better-auth` or `stripe`; any other
   dependency name is never sent);
 - counts of planned events, recommendations, findings, changed files and
   passed or failed checks, and the installed SDK version.
 
-It never contains source code, file paths, repository names or prompts.
-`--no-telemetry`, `DATABUDDY_TELEMETRY=0` or any `DO_NOT_TRACK` value except
-`0` turns it off, and each of them wins over everything else.
+It never contains source code, file paths, error text, repository names or
+prompts. A line on stderr says when a report is about to be sent.
+`--no-telemetry`, `DATABUDDY_TELEMETRY=0` (or `false`, `off`, `no`) and any
+`DO_NOT_TRACK` value other than `0`, `false` or `no` turn it off, and each of
+them wins over everything else. `diagnose` never sends a report.
 `DATABUDDY_TELEMETRY=print` shows the exact payload instead of sending it.
 
 Send a bug report, feature request or other feedback with:
@@ -176,13 +189,17 @@ key files (such as `secrets.ts`, `keys.ts` or `service-account.json`), and any
 service-account key JSON whatever its name are excluded. In every file that
 remains, the agent redacts credential values from your environment, private
 key blocks, keys in the formats AWS, GitHub, Stripe, Slack, Google, npm,
-Resend, Mailgun, OpenAI, Anthropic, Vercel and Databuddy use, JWTs, passwords
-in URLs, values assigned to secret-named keys and identifiers (quoted in code
-such as `apiKey: "..."` or `const dbPass = "..."`, unquoted in YAML, TOML and
-env files), and random-looking quoted strings of 32 or more characters.
-Detection is pattern-based, so a secret in a format it does not recognise can
-still reach the provider; only run the agent on code you allow that provider
-to read. The model can read only that snapshot: Codex runs under a permission
+Resend, Mailgun, SendGrid, GitLab, OpenAI, Anthropic, Vercel and Databuddy
+use, JWTs, Basic auth headers, passwords in URLs and connection strings, PHP
+`define()` secrets, and values assigned to secret-named keys and identifiers:
+six or more characters for password names, eight for signing, HMAC and
+encryption keys, ten (with letters and digits) for other secret names in
+code, and eight unquoted in YAML, TOML and env files. Random-looking quoted
+strings of 32 or more characters are redacted too. Detection is pattern-based,
+so a secret in a format it does not recognise, such as a short key under a
+neutral name, can still reach the provider. Run a secret scanner such as
+gitleaks first, preview with `databuddy snapshot`, and only run the agent on
+code you allow that provider to read. The model can read only that snapshot: Codex runs under a permission
 profile that denies every other path, and Claude's file tools refuse paths
 outside it.
 The agent never loads the target's environment files or executes its

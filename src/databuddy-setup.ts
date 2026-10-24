@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import packageJson from "../package.json" with { type: "json" };
 import type { runSetupTask } from "./agents/run-task.js";
 import type { AgentProgress } from "./agents/types.js";
 import { atomicWriteFileSync } from "./atomic-file.js";
@@ -706,10 +707,13 @@ export async function runDatabuddySetup(
   const config = options.config ?? {};
   const agentType = options.agentType ?? "codex";
   const redact = createSetupRedactor();
-  const intent = digest(JSON.stringify({ version: 1, request, agentType, config }));
+  const intent = digest(
+    JSON.stringify({ version: 1, request, agentType, config, cli: packageJson.version }),
+  );
   const fingerprintFor = (contents: Map<string, string>) =>
     digest(
-      JSON.stringify({ version: 1, request, agentType, config }) + JSON.stringify([...contents]),
+      JSON.stringify({ version: 1, request, agentType, config, cli: packageJson.version }) +
+        JSON.stringify([...contents]),
     );
   const save = (checkpoint: DatabuddySetupCheckpoint) =>
     atomicWriteFileSync(stateFile, `${JSON.stringify(checkpoint, null, 2)}\n`, { mode: 0o600 });

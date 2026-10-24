@@ -560,10 +560,8 @@ export const DatabuddyReportRequestSchema = z
       .max(4)
       .default(["events", "tracker", "server", "growth"]),
     // The action scan sends code excerpts to Databuddy's scan API, so it runs
-    // only when the user turns it on; "auto" is the earlier name for "on".
-    scan: z
-      .preprocess((value) => (value === "auto" ? "on" : value), z.enum(["on", "off"]))
-      .default("off"),
+    // only when the user turns it on.
+    scan: z.enum(["on", "off"]).default("off"),
   })
   .strict();
 

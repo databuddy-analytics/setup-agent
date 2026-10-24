@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -7,7 +8,7 @@ import { hasCodexPricing } from "./agents/codex.js";
 import { type RunSetupTaskParams, runSetupTask } from "./agents/run-task.js";
 import type { AgentProgress } from "./agents/types.js";
 import { runChecks } from "./checks.js";
-import { runDatabuddyDiagnosis } from "./databuddy-diagnosis.js";
+import { runDatabuddyDiagnosis, selectFiles } from "./databuddy-diagnosis.js";
 import { renderReportMarkdown, runDatabuddyReport } from "./databuddy-report.js";
 import { runDatabuddySetup } from "./databuddy-setup.js";
 import { DATABUDDY_MCP_URL, installDatabuddyMcp, type McpScope, planMcpInstall } from "./mcp.js";
@@ -22,9 +23,11 @@ import {
   type ThinkingLevel,
 } from "./model.js";
 import { describeError, setupErrorExitCode } from "./protocol.js";
+import { exportSnapshot, sourceFiles } from "./repository-snapshot.js";
 import type { DatabuddyReportArea } from "./schema.js";
 import { feedbackPayload, runPayload, sendTelemetry, telemetryMode } from "./telemetry.js";
 import { createSetupRedactor, normalizeTerminalLine } from "./terminal.js";
+import { makeWorkDir } from "./workdir.js";
 
 type SetupProduct = Parameters<typeof runDatabuddySetup>[0]["request"]["products"][number];
 
@@ -57,7 +60,7 @@ interface ReportCliOptions extends AgentCliOptions {
   journey?: string;
   scope: string[];
   areas?: string;
-  scan: "on" | "off" | "auto";
+  scan: "on" | "off";
   scanBin?: string;
   markdown?: string;
 }
@@ -129,11 +132,15 @@ function addAgentOptions(command: Command): Command {
       "--max-cost-usd <n>",
       "Stop before further tasks when estimated invocation cost reaches this amount",
       parseCost,
-    )
-    .option(
-      "--no-telemetry",
-      "Do not send the run report (outcome, framework, well-known packages; never code or paths) to Databuddy",
     );
+}
+
+// Only setup and report send a run report; diagnose never does.
+function addTelemetryOption(command: Command): Command {
+  return command.option(
+    "--no-telemetry",
+    "Do not send the run report (outcome, framework, well-known packages; never code, paths or error text) to Databuddy",
+  );
 }
 
 const SCAN_NOTICE = `The optional action scan is off. With --scan on, @databuddy/scan first maps every user action in the code, which usually finds more tracking gaps. Only the actions it finds and the functions they call are sent, not whole files (Swift and files it cannot parse are sent whole), to Databuddy's scan API, which classifies them with the Jev model on Vercel AI Gateway under zero data retention. Your code is never stored or logged; Databuddy records only request size, counts and timing. Set AI_GATEWAY_API_KEY to send it to your own Vercel AI Gateway account instead, and Databuddy receives nothing. Preview every line with npx @databuddy/scan@0.1.3 --dry-run. Details: https://www.databuddy.cc/docs/privacy/event-scanner
@@ -162,10 +169,11 @@ async function reportRun(
     durationMs: Date.now() - started,
     ...outcome,
   });
-  if ((await sendTelemetry(payload, { mode })) === "sent")
+  if (mode === "send")
     process.stderr.write(
-      "Sent this run's outcome, framework and well-known packages to Databuddy to improve the setup agent (no code or paths). Turn off with --no-telemetry or DATABUDDY_TELEMETRY=0.\n",
+      "Sending this run's outcome, framework and well-known packages, tied to your website ID, to Databuddy to improve the setup agent (no code, paths or error text). Turn off with --no-telemetry or DATABUDDY_TELEMETRY=0.\n",
     );
+  await sendTelemetry(payload, { mode });
 }
 
 let redact = createSetupRedactor();
@@ -281,7 +289,7 @@ const setup = program
     [],
   );
 
-addAgentOptions(setup).action((repository: string, options: SetupCliOptions) =>
+addTelemetryOption(addAgentOptions(setup)).action((repository: string, options: SetupCliOptions) =>
   runAgentCommand(
     "setup",
     options,
@@ -358,13 +366,13 @@ const report = program
       "--scan <mode>",
       "Optional action scan first: on sends action code excerpts (not whole files) to Databuddy's zero-data-retention scan API, or to your own AI Gateway when AI_GATEWAY_API_KEY is set",
     )
-      .choices(["on", "off", "auto"])
+      .choices(["on", "off"])
       .default("off"),
   )
   .option("--scan-bin <path>", "Path to a databuddy-scan binary or bundled cli.js")
   .option("--markdown <file>", "Also write the report as markdown to this file");
 
-addAgentOptions(report).action(
+addTelemetryOption(addAgentOptions(report)).action(
   (repository: string, options: ReportCliOptions, command: Command) => {
     if (command.getOptionValueSource("scan") === "default") process.stderr.write(SCAN_NOTICE);
     return runAgentCommand(
@@ -381,7 +389,7 @@ addAgentOptions(report).action(
             journey: options.journey,
             scope: options.scope,
             ...(areas ? { areas } : {}),
-            scan: options.scan === "auto" ? "on" : options.scan,
+            scan: options.scan,
           },
           scanBin: options.scanBin,
           ...context,
@@ -403,7 +411,7 @@ program
     "Add Databuddy's hosted MCP server to your claude or codex config so your agent can query analytics and create funnels, goals and flags",
   )
   .addOption(
-    new Option("--agent <backend>", "Agent to configure").choices(AGENTS).default("claude"),
+    new Option("--agent <backend>", "Agent to configure").choices(AGENTS).makeOptionMandatory(),
   )
   .addOption(
     new Option(
@@ -435,6 +443,33 @@ program
       );
     },
   );
+
+program
+  .command("snapshot <repository>")
+  .description(
+    "Write the exact filtered, redacted source a model task would read to a directory, without any model call, so you can audit it first",
+  )
+  .requiredOption("--out <dir>", "New or empty directory to write the snapshot to")
+  .option(
+    "--scope <relative-path>",
+    "Source file or subtree to include (repeatable)",
+    collectRepeatable,
+    [],
+  )
+  .action((repository: string, options: { out: string; scope: string[] }) => {
+    const root = fs.realpathSync(path.resolve(repository));
+    const index = makeWorkDir("databuddy-snapshot-");
+    try {
+      execFileSync("git", ["init", "--bare", "--quiet", "--template=", index], { stdio: "pipe" });
+      const files = selectFiles(sourceFiles(root, index), options.scope);
+      const result = exportSnapshot(root, files, path.resolve(options.out), createSetupRedactor());
+      process.stdout.write(
+        `${JSON.stringify({ out: path.resolve(options.out), ...result }, null, 2)}\n`,
+      );
+    } finally {
+      fs.rmSync(index, { recursive: true, force: true });
+    }
+  });
 
 program
   .command("feedback <message>")
