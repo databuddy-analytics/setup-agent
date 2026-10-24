@@ -426,6 +426,52 @@ describe("dedupeFindings", () => {
     ]);
     expect(near.map((item) => item.id)).toEqual(["events_5", "growth_5"]);
   });
+
+  it("merges one outcome reported under different kinds, names and funnel entries", () => {
+    const checkout = [{ path: "components/cart/modal.tsx", line: 218, quote: "x", reason: "y" }];
+    const event = (
+      area: string,
+      index: number,
+      kind: "custom_event" | "server_event",
+      eventName: string,
+      priority: "journey" | "enrichment",
+    ) =>
+      finding(area, index, {
+        category: "recommendation",
+        evidence: checkout,
+        recommendation: { kind, priority, eventName },
+      });
+    const funnel = (area: string, entry: string, end: string) =>
+      finding(area, 9, {
+        category: "recommendation",
+        recommendation: {
+          kind: "funnel",
+          priority: "journey",
+          steps: [
+            { type: "path", value: entry },
+            { type: "event", value: end },
+          ],
+        },
+      });
+    const deduped = dedupeFindings([
+      event("events", 1, "custom_event", "checkout_started", "journey"),
+      event("tracker", 1, "custom_event", "checkout_started", "enrichment"),
+      event("server", 1, "server_event", "checkout_handoff_started", "enrichment"),
+      funnel("events", "/search", "checkout_started"),
+      funnel("growth", "/", "checkout_handoff_started"),
+      finding("tracker", 2, {
+        category: "gap",
+        evidence: [{ path: "app/layout.tsx", line: 36, quote: "x", reason: "y" }],
+      }),
+      finding("events", 2, {
+        category: "problem",
+        evidence: [{ path: "app/layout.tsx", line: 36, quote: "x", reason: "y" }],
+      }),
+    ]);
+    expect(deduped.map((item) => item.id)).toEqual(["events_1", "events_9", "tracker_2"]);
+    expect(deduped[0].explanation).toContain("Also found as server_1");
+    expect(deduped[1].explanation).toContain("Also found as growth_9");
+  });
 });
 
 describe("Databuddy utilization report", () => {

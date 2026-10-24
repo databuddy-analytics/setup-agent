@@ -281,19 +281,34 @@ export function validateFindingRecommendations(
   if (errors.length) throw new Error(`Recommendation validation failed: ${errors.join("; ")}`);
 }
 
+const EVENT_KINDS = new Set(["custom_event", "server_event"]);
+const isEventRecommendation = (finding: DatabuddyDiagnosisFinding) =>
+  EVENT_KINDS.has(finding.recommendation?.kind ?? "");
+const anchorOf = (finding: DatabuddyDiagnosisFinding) =>
+  `${finding.evidence[0]?.path}:${finding.evidence[0]?.line}`;
+
 function recommendationKey(finding: DatabuddyDiagnosisFinding): string | undefined {
   const recommendation = finding.recommendation;
   if (!recommendation) return undefined;
+  // Areas describe the same outcome with different kinds and wording: a browser
+  // and a server event for one add-to-cart, or funnels with different entries
+  // into one conversion. Key on the outcome instead of the phrasing.
+  if (EVENT_KINDS.has(recommendation.kind) && recommendation.eventName)
+    return `event|${recommendation.eventName}`;
+  if (recommendation.kind === "funnel" && recommendation.steps?.length)
+    return `funnel|end=${recommendation.steps.at(-1)?.value}`;
   const parts: string[] = [recommendation.kind];
   if (recommendation.option) parts.push(`option=${recommendation.option}`);
-  if (recommendation.eventName) parts.push(`event=${recommendation.eventName}`);
   if (recommendation.steps)
     parts.push(`steps=${recommendation.steps.map((step) => step.value).join(">")}`);
   if (recommendation.target) parts.push(`target=${recommendation.target.value}`);
-  if (parts.length === 1)
-    parts.push(`anchor=${finding.evidence[0]?.path}:${finding.evidence[0]?.line}`);
+  if (parts.length === 1) parts.push(`anchor=${anchorOf(finding)}`);
   return parts.join("|");
 }
+
+// Problems and gaps are one family: "no tracker is mounted" is reported as
+// either by different areas.
+const findingFamily = (category: string) => (category === "gap" ? "problem" : category);
 
 export function dedupeFindings(findings: DatabuddyDiagnosisFinding[]): DatabuddyDiagnosisFinding[] {
   const ranked = [...findings].sort(
@@ -301,6 +316,40 @@ export function dedupeFindings(findings: DatabuddyDiagnosisFinding[]): Databuddy
       (PRIORITY_ORDER[a.recommendation?.priority ?? "enrichment"] ?? 2) -
       (PRIORITY_ORDER[b.recommendation?.priority ?? "enrichment"] ?? 2),
   );
+  // Event recommendations anchored on the same source line measure the same
+  // outcome under different names; keep the higher-priority name and point
+  // funnels and goals at it.
+  const renamed = new Map<string, string>();
+  const eventAtAnchor = new Map<string, string>();
+  for (const finding of ranked) {
+    const name = finding.recommendation?.eventName;
+    if (!isEventRecommendation(finding) || !name) continue;
+    const kept = eventAtAnchor.get(anchorOf(finding));
+    if (kept && kept !== name) renamed.set(name, kept);
+    else if (!kept) eventAtAnchor.set(anchorOf(finding), name);
+  }
+  const rename = (value: string) => renamed.get(value) ?? value;
+  const normalized = ranked.map((finding) => {
+    const recommendation = finding.recommendation;
+    if (!recommendation || renamed.size === 0) return finding;
+    return {
+      ...finding,
+      recommendation: {
+        ...recommendation,
+        ...(recommendation.eventName ? { eventName: rename(recommendation.eventName) } : {}),
+        ...(recommendation.steps
+          ? {
+              steps: recommendation.steps.map((step) =>
+                step.type === "event" ? { ...step, value: rename(step.value) } : step,
+              ),
+            }
+          : {}),
+        ...(recommendation.target?.type === "event"
+          ? { target: { ...recommendation.target, value: rename(recommendation.target.value) } }
+          : {}),
+      },
+    };
+  });
   const kept = new Map<string, DatabuddyDiagnosisFinding>();
   const order: string[] = [];
   const nearby = (finding: DatabuddyDiagnosisFinding): string | undefined => {
@@ -310,7 +359,7 @@ export function dedupeFindings(findings: DatabuddyDiagnosisFinding[]): Databuddy
       const other = candidate.evidence[0];
       if (
         !candidate.recommendation &&
-        candidate.category === finding.category &&
+        findingFamily(candidate.category) === findingFamily(finding.category) &&
         other?.path === anchor.path &&
         Math.abs(other.line - anchor.line) <= 40
       )
@@ -318,11 +367,11 @@ export function dedupeFindings(findings: DatabuddyDiagnosisFinding[]): Databuddy
     }
     return undefined;
   };
-  for (const finding of ranked) {
+  for (const finding of normalized) {
     const key =
       recommendationKey(finding) ??
       nearby(finding) ??
-      `${finding.category}|${finding.evidence[0]?.path}:${finding.evidence[0]?.line}`;
+      `${findingFamily(finding.category)}|${anchorOf(finding)}`;
     const existing = kept.get(key);
     if (!existing) {
       kept.set(key, finding);
