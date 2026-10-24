@@ -35,6 +35,28 @@ const BASIS_SLIPS: Record<string, string> = {
   hypothetical: "hypothesis",
 };
 
+// A recommendation object without its kind and priority cannot be validated
+// or acted on; drop it and keep the finding rather than failing the run.
+function dropMalformedRecommendation(record: Record<string, unknown>): void {
+  const recommendation = record.recommendation as Record<string, unknown> | undefined;
+  if (
+    recommendation !== undefined &&
+    (!recommendation ||
+      typeof recommendation !== "object" ||
+      typeof recommendation.kind !== "string" ||
+      typeof recommendation.priority !== "string")
+  )
+    delete record.recommendation;
+}
+
+// Only recommendation findings carry the object. A recommendation without one
+// is still a useful gap, and an object on any other finding is noise.
+function reconcileRecommendationCategory(record: Record<string, unknown>): void {
+  if (record.category === "recommendation" && record.recommendation === undefined)
+    record.category = "gap";
+  else if (record.category !== "recommendation") delete record.recommendation;
+}
+
 export function normalizeFindingSlips(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const envelope = value as Record<string, unknown>;
@@ -54,6 +76,8 @@ export function normalizeFindingSlips(value: unknown): unknown {
       const key = record.basis.trim().toLowerCase();
       record.basis = BASIS_SLIPS[key] ?? key;
     }
+    dropMalformedRecommendation(record);
+    reconcileRecommendationCategory(record);
     return record;
   });
   return { ...envelope, findings };
@@ -92,6 +116,8 @@ export function normalizeVerdictSlips(value: unknown): unknown {
     if (verdict.verdict === "supported" && finding.basis === "hypothesis")
       verdict.verdict = "uncertain";
     if (verdict.verdict === "uncertain") finding.basis = "hypothesis";
+    dropMalformedRecommendation(finding);
+    reconcileRecommendationCategory(finding);
     verdict.finding = finding;
     return verdict;
   });

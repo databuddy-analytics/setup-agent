@@ -134,4 +134,38 @@ describe("evidenceWindows", () => {
       "",
     );
   });
+
+  it("drops a recommendation missing its kind or priority instead of failing the finding", () => {
+    const normalized = normalizeFindingSlips({
+      findings: [
+        { id: "a", category: "recommendation", recommendation: { eventName: "signup_completed" } },
+        {
+          id: "b",
+          category: "recommendation",
+          recommendation: { kind: "custom_event", priority: "journey" },
+        },
+      ],
+    }) as { findings: Record<string, unknown>[] };
+    expect(normalized.findings[0]).not.toHaveProperty("recommendation");
+    // Without its object, a recommendation is kept as a gap.
+    expect(normalized.findings[0].category).toBe("gap");
+    expect(normalized.findings[1].recommendation).toEqual({
+      kind: "custom_event",
+      priority: "journey",
+    });
+    const verdicts = normalizeVerdictSlips({
+      verdicts: [
+        {
+          findingId: "a",
+          verdict: "supported",
+          finding: {
+            category: "problem",
+            basis: "source",
+            recommendation: { kind: "goal", priority: "journey" },
+          },
+        },
+      ],
+    }) as { verdicts: { finding: Record<string, unknown> }[] };
+    expect(verdicts.verdicts[0].finding).not.toHaveProperty("recommendation");
+  });
 });
