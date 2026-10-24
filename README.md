@@ -56,21 +56,31 @@ result without a model call; an interrupted run resumes the work it has
 not finished. Private task records, including redacted prompts and usage,
 stay in `.databuddy/runs/`. Add `.databuddy/` to the target's `.gitignore`.
 
-`report` runs `@databuddy/scan` first. It uses `--scan-bin` when given, then
-`databuddy-scan` on `PATH`, then `npx @databuddy/scan`. The scan sends code
-excerpts to Databuddy's scan API under its zero-retention terms; `--scan off`
-skips it. Limit any command to part of a monorepo with repeatable `--scope`
+`report` runs `@databuddy/scan` first, from the exact version pinned as a
+dependency of this package (or `--scan-bin` when given); nothing is downloaded
+at run time. The scan sends code excerpts to Databuddy's scan API under its
+zero-retention terms; `--scan off` skips it, and `setup` and `diagnose` never
+run it. Limit any command to part of a monorepo with repeatable `--scope`
 options, and `report` to some areas with `--areas events,tracker`.
 
 ## Keep working in your agent
 
-`npx @databuddy/setup-agent mcp --agent claude` (or `--agent codex`) adds
-Databuddy's hosted MCP server to that agent's user config, so the same
-Claude Code or Codex session can query your analytics and create the
-recommended funnels, goals, flags and links. Pass `--mcp` to `setup` or
-`report` to do this when the run finishes. It uses the agent's own
-`mcp add` command and leaves an existing `databuddy` entry unchanged. Sign
-in afterwards with `/mcp` in Claude Code or `codex mcp login databuddy`.
+`setup` and `report` never change your agent's configuration. When they
+finish, they print a command that adds Databuddy's hosted MCP server so the
+same Claude Code or Codex session can query your analytics and create the
+recommended funnels, goals, flags and links:
+
+```bash
+npx @databuddy/setup-agent mcp /path/to/app --agent claude
+```
+
+It prints exactly what it will change and asks before changing it (pass
+`--yes` when not running in a terminal). For Claude Code it writes the
+repository's own `.mcp.json` unless you pass `--scope user`. Codex has only a
+user-level config (`~/.codex/config.toml`), and the command says so before
+asking. It uses the agent's own `mcp add` command and leaves an existing
+`databuddy` entry unchanged. Sign in afterwards with `/mcp` in Claude Code or
+`codex mcp login databuddy`.
 
 ## Check applied edits
 
@@ -117,10 +127,16 @@ bills `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` instead of a subscription.
 [Models](docs/models.md) lists the defaults and credential checks.
 
 The selected model provider receives a temporary snapshot of your source,
-manifests, and Markdown. Hidden files, dependencies, build output, tests,
-symlinks, and credential-named files are excluded, and known credential
-values and token shapes are redacted. Filtering is not complete secret
-detection, so only run the agent on code you allow that provider to read.
+manifests, and Markdown. Hidden files (including every `.env`), dependencies,
+build output, tests, lockfiles, symlinks, and credential or key files (such as
+`secrets.ts`, `keys.ts` or `service-account.json`) are excluded. In every file
+that remains, the agent redacts credential values from your environment,
+private key blocks, and keys in the formats AWS, GitHub, Stripe, Slack,
+Google, npm, Resend, OpenAI, Anthropic, Vercel and Databuddy use, as well as
+JWTs, passwords in URLs, and long quoted values assigned to secret-named keys
+such as `apiKey: "..."`. Detection is pattern-based, so a secret in a format
+it does not recognise can still reach the provider; only run the agent on
+code you allow that provider to read.
 The agent never loads the target's environment files or executes its
 configuration.
 

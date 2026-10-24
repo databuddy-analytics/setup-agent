@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { Command, InvalidArgumentError, Option } from "commander";
 import packageJson from "../package.json" with { type: "json" };
 import { type RunSetupTaskParams, runSetupTask } from "./agents/run-task.js";
@@ -7,7 +9,7 @@ import { runChecks } from "./checks.js";
 import { runDatabuddyDiagnosis } from "./databuddy-diagnosis.js";
 import { renderReportMarkdown, runDatabuddyReport } from "./databuddy-report.js";
 import { runDatabuddySetup } from "./databuddy-setup.js";
-import { installDatabuddyMcp } from "./mcp.js";
+import { DATABUDDY_MCP_URL, installDatabuddyMcp, type McpScope, planMcpInstall } from "./mcp.js";
 import {
   AGENTS,
   type AgentBackend,
@@ -32,7 +34,6 @@ interface AgentCliOptions {
   modelAuth: ModelAuth;
   timeout: number;
   maxCostUsd?: number;
-  mcp: boolean;
   telemetry: boolean;
 }
 
@@ -121,11 +122,6 @@ function addAgentOptions(command: Command): Command {
         .choices(MODEL_AUTH)
         .default("local"),
     )
-    .option(
-      "--mcp",
-      "Afterwards, add Databuddy's MCP server to your codex or claude config so you can keep working with your analytics",
-      false,
-    )
     .option("--timeout <seconds>", "Deadline in seconds, from 1 to 3600", parseTimeout, 600)
     .option(
       "--max-cost-usd <n>",
@@ -169,11 +165,12 @@ async function reportRun(
 
 let redact = createSetupRedactor();
 
-async function reportMcpInstall(agent: AgentBackend): Promise<void> {
-  const result = await installDatabuddyMcp(agent);
-  process.stderr.write(
-    `${result.status === "added" ? `Added the Databuddy MCP server to ${agent}.` : ""} ${result.next}\n`.trimStart(),
-  );
+async function confirm(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const readline = createInterface({ input: process.stdin, output: process.stderr });
+  const answer = await readline.question(`${question} [y/N] `);
+  readline.close();
+  return /^y(es)?$/i.test(answer.trim());
 }
 
 async function runAgentCommand(
@@ -219,7 +216,10 @@ async function runAgentCommand(
     await reportRun(telemetry, options, String(config.model), started, {
       artifact: artifact as Record<string, unknown>,
     });
-    if (options.mcp) await reportMcpInstall(agentType);
+    if (telemetry && artifact && process.stderr.isTTY)
+      process.stderr.write(
+        `To keep working with this data in ${agentType}, run: npx @databuddy/setup-agent mcp ${telemetry.repository} --agent ${agentType}\n`,
+      );
   } catch (error) {
     await reportRun(telemetry, options, String(config.model), started, { error });
     throw error;
@@ -367,12 +367,43 @@ addAgentOptions(report).action((repository: string, options: ReportCliOptions) =
 );
 
 program
-  .command("mcp")
+  .command("mcp [repository]")
   .description(
-    "Add Databuddy's hosted MCP server to your codex or claude config so your agent can query analytics and create funnels, goals and flags",
+    "Add Databuddy's hosted MCP server to your claude or codex config so your agent can query analytics and create funnels, goals and flags",
   )
-  .addOption(new Option("--agent <backend>", "Agent to configure").choices(AGENTS).default("codex"))
-  .action((options: { agent: AgentBackend }) => reportMcpInstall(options.agent));
+  .addOption(
+    new Option("--agent <backend>", "Agent to configure").choices(AGENTS).default("claude"),
+  )
+  .addOption(
+    new Option(
+      "--scope <scope>",
+      "Claude: project writes the repository's .mcp.json (default); user writes your Claude config. Codex is always user-level",
+    ).choices(["project", "user"]),
+  )
+  .option("--yes", "Apply without asking (required when not running in a terminal)", false)
+  .action(
+    async (
+      repository: string | undefined,
+      options: { agent: AgentBackend; scope?: McpScope; yes: boolean },
+    ) => {
+      const plan = planMcpInstall(options.agent, {
+        repository: repository ?? ".",
+        scope: options.scope,
+      });
+      process.stderr.write(
+        `This adds Databuddy's MCP server (${DATABUDDY_MCP_URL}) to ${plan.writes}.\n  ${path.basename(plan.executable)} ${plan.args.join(" ")}\n`,
+      );
+      if (!options.yes && !(await confirm("Continue?"))) {
+        process.stderr.write("Nothing was changed. Rerun with --yes to apply.\n");
+        process.exitCode = 2;
+        return;
+      }
+      const result = await installDatabuddyMcp(plan);
+      process.stderr.write(
+        `${result.status === "added" ? "Added the Databuddy MCP server. " : ""}${result.next}\n`,
+      );
+    },
+  );
 
 program
   .command("feedback <message>")

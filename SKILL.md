@@ -52,10 +52,11 @@ access, an app build, or live delivery. Review event properties for sensitive da
 
 ## Hand off to the user's agent
 
-After a successful run, offer `npx @databuddy/setup-agent mcp --agent <codex|claude>`
-(or rerun with `--mcp`) so the user can query their data and create the
+After a successful run, offer `npx @databuddy/setup-agent mcp <repository>
+--agent <claude|codex>` so the user can query their data and create the
 recommended funnels and goals through Databuddy's MCP server. It changes the
-agent's user config, so run it only when the user agrees.
+agent's configuration (the repository's `.mcp.json` for Claude, the user's
+Codex config for Codex), so run it with `--yes` only after the user agrees.
 
 ## Report problems
 
