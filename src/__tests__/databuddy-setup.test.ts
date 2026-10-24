@@ -574,6 +574,8 @@ describe("Databuddy setup planning", () => {
 describe("Databuddy setup implementation", () => {
   it("reviews candidate files before applying private edits and reuses unchanged applied work", async () => {
     const repository = fixture();
+    // pnpm apps carry a lockfile that the SDK installer rewrites.
+    write(repository, "pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
     const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
     const layoutBefore = fs.readFileSync(path.join(repository, "app/layout.tsx"), "utf8");
     fs.chmodSync(path.join(repository, "app/layout.tsx"), 0o640);
@@ -604,6 +606,7 @@ describe("Databuddy setup implementation", () => {
       runTask,
       installSdk: async (target: string) => {
         installations++;
+        write(target, "pnpm-lock.yaml", "lockfileVersion: '9.0'\n# @databuddy/sdk 3.0.1\n");
         return installFixtureSdk(target);
       },
     };

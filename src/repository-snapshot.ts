@@ -41,6 +41,14 @@ const EXCLUDED_DIRECTORIES = new Set([
   "fixtures",
 ]);
 
+const LOCKFILES = new Set([
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "pnpm-lock.yaml",
+  "bun.lock",
+  "yarn.lock",
+]);
+
 export function isSourcePath(relative: string): boolean {
   const segments = relative.split("/");
   return (
@@ -48,7 +56,8 @@ export function isSourcePath(relative: string): boolean {
     !segments.some((segment) => segment.startsWith(".") || EXCLUDED_DIRECTORIES.has(segment)) &&
     SOURCE_EXTENSIONS.has(path.extname(relative)) &&
     !relative.endsWith(".d.ts") &&
-    !["package-lock.json", "npm-shrinkwrap.json"].includes(path.basename(relative)) &&
+    // Lockfiles are generated, often huge, and rewritten by the SDK installer.
+    !LOCKFILES.has(path.basename(relative)) &&
     !/(?:^|[._-])(?:credentials?|secrets?|tokens?|passwords?|api[-_]?keys?|private[-_]?keys?)(?:[._-]|$)/i.test(
       path.basename(relative),
     )
