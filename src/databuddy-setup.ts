@@ -863,6 +863,23 @@ export async function runDatabuddySetup(
         );
       return await apply(saved);
     }
+    if (
+      options.apply &&
+      !options.patchOnly &&
+      saved?.status === "reviewing" &&
+      saved.savedPatchHash
+    ) {
+      const stale = !matchesIntent || saved.intent !== intent || saved.fingerprint !== fingerprint;
+      const edited =
+        !fs.existsSync(diffFile) ||
+        digest(fs.readFileSync(diffFile, "utf8")) !== saved.savedPatchHash;
+      if (stale || edited)
+        throw new Error(
+          stale
+            ? "The reviewed patch in .databuddy/setup.patch was made for different source or options; nothing was applied. Rerun with --patch and review the new patch first."
+            : "The reviewed patch in .databuddy/setup.patch was edited or removed after review; nothing was applied. Rerun with --patch to regenerate it.",
+        );
+    }
     let pending: ReviewCheckpoint | undefined;
     if (
       saved?.status === "reviewing" &&
@@ -1074,11 +1091,13 @@ export async function runDatabuddySetup(
       fs.rmSync(rejectedFile, { force: true });
       // The reviewing checkpoint already holds the passed review, so a later
       // --apply applies exactly this patch without another model call.
-      if (options.patchOnly)
+      if (options.patchOnly) {
+        save({ ...proposal, sourceReview: review, savedPatchHash: digest(diff) });
         return DatabuddySetupResultSchema.parse({
           ...result,
           patch: { diff: ".databuddy/setup.patch", files: changes.length, sourceReview: review },
         });
+      }
       const journal: ApplyCheckpoint = {
         version: 1,
         fingerprint,

@@ -691,6 +691,37 @@ describe("Databuddy setup implementation", () => {
       expect(fs.readFileSync(path.join(repository, change.path), "utf8")).toBe(change.content);
   });
 
+  it("refuses to apply anything but the exact reviewed patch", async () => {
+    for (const change of ["source", "patch"] as const) {
+      const repository = fixture();
+      const runTask: RunTask = async ({ prompt }) => {
+        if (prompt.startsWith("Generate the smallest")) return JSON.stringify(implementation());
+        if (prompt.startsWith("Independently verify")) return JSON.stringify(sourceReview());
+        return JSON.stringify(plan());
+      };
+      await runDatabuddySetup({ repository, request, apply: true, patchOnly: true, runTask });
+      // A person reviewed .databuddy/setup.patch; then something changed.
+      if (change === "source") write(repository, "README.md", "Edited after review\n");
+      else fs.appendFileSync(path.join(repository, ".databuddy/setup.patch"), "\n# edited\n");
+      const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
+      await expect(
+        runDatabuddySetup({
+          repository,
+          request,
+          apply: true,
+          runTask: async () => {
+            throw new Error("Applying must not re-plan or re-implement a reviewed patch");
+          },
+          installSdk: async () => {
+            throw new Error("A refused patch must not install dependencies");
+          },
+        }),
+      ).rejects.toThrow(change === "source" ? "different source or options" : "edited or removed");
+      expect(fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8")).toBe(actionsBefore);
+      expect(fs.existsSync(path.join(repository, "app/analytics.ts"))).toBe(false);
+    }
+  });
+
   it("bounds independent review repair and leaves customer files untouched when review fails", async () => {
     const repository = fixture();
     const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");

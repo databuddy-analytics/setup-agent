@@ -303,6 +303,9 @@ export const DatabuddySetupCheckpointSchema = z
       status: z.literal("reviewing"),
       attempt: z.number().int().min(0).max(2),
       sourceReview: DatabuddySetupSourceReviewSchema.optional(),
+      // Set by --patch: a person may have reviewed this exact diff, so --apply
+      // must apply it unchanged or refuse, never re-plan.
+      savedPatchHash: hashSchema.optional(),
     }),
     journalSchema.extend({ status: z.literal("applying") }),
     journalSchema.extend({ status: z.literal("applied") }),
