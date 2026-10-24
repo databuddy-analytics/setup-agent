@@ -8,10 +8,11 @@ description: Inspect a web application repository and save a resumable Databuddy
 The `databuddy` command detects the application framework from its manifests,
 inspects the repository, and produces a plan for
 SDK placement, custom events, and the other products you request. Add `--apply`
-to independently review and apply SDK/custom-event edits at a Next.js app
-(other frameworks are planning-only today)
-root and install the supported 3.x SDK through bun, pnpm, or npm with scripts
-and pnpm hooks disabled. Other products remain planning-only. Website
+to independently review and apply SDK/custom-event edits at a Next.js app root
+(other frameworks are planning-only today) and install the supported 3.x SDK
+through npm, pnpm, bun, or Yarn with install scripts and pnpm hooks disabled.
+Yarn Plug'n'Play projects get `--patch` only, since the installed SDK cannot be
+checked without `node_modules`. Other products remain planning-only. Website
 authorization checks and runtime event delivery remain pending.
 
 ## Run the command

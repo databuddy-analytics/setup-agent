@@ -2,7 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enforceHunkReview, missingPlannedEvents, runDatabuddySetup } from "../databuddy-setup.js";
+import {
+  enforceHunkReview,
+  missingPlannedEvents,
+  runDatabuddySetup,
+  sdkInstallCommand,
+} from "../databuddy-setup.js";
 import type {
   DatabuddySetupChanges,
   DatabuddySetupPlan,
@@ -1252,5 +1257,38 @@ describe("planned event coverage", () => {
         new Map([["lib/stage.ts", "client.track({ name: 'deal_stage_changed' });"]]),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("SDK install command", () => {
+  it("disables install scripts for every supported package manager and refuses Plug'n'Play", () => {
+    const repository = fixture();
+    const noVersion = () => {
+      throw new Error("yarn --version should not run");
+    };
+    write(repository, "pnpm-lock.yaml", "");
+    expect(sdkInstallCommand(repository).args).toEqual(
+      expect.arrayContaining(["--ignore-scripts", "--ignore-pnpmfile"]),
+    );
+    fs.rmSync(path.join(repository, "pnpm-lock.yaml"));
+    write(repository, "yarn.lock", "");
+    expect(sdkInstallCommand(repository, () => "1.22.22")).toEqual({
+      file: "yarn",
+      args: ["add", "@databuddy/sdk@^3", "--ignore-scripts"],
+    });
+    write(
+      repository,
+      "package.json",
+      JSON.stringify({ packageManager: "yarn@4.5.3", dependencies: { next: "fixture" } }),
+    );
+    expect(() => sdkInstallCommand(repository, noVersion)).toThrow("Plug'n'Play");
+    write(repository, ".yarnrc.yml", "nodeLinker: node-modules\n");
+    expect(sdkInstallCommand(repository, noVersion)).toEqual({
+      file: "yarn",
+      args: ["add", "@databuddy/sdk@^3", "--mode=skip-build"],
+      env: { YARN_ENABLE_SCRIPTS: "0" },
+    });
+    write(repository, ".pnp.cjs", "");
+    expect(() => sdkInstallCommand(repository, noVersion)).toThrow("Plug'n'Play");
   });
 });

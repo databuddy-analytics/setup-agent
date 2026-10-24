@@ -364,39 +364,75 @@ function installedSdk(repository: string): string | undefined {
   return undefined;
 }
 
-async function installSdk(repository: string, signal?: AbortSignal): Promise<string> {
-  const existing = installedSdk(repository);
-  if (existing) return existing;
+/**
+ * The command that adds the SDK as a runtime dependency with install scripts
+ * disabled, for the package manager the repository uses.
+ */
+export function sdkInstallCommand(
+  repository: string,
+  yarnVersion: () => string = () =>
+    execFileSync("yarn", ["--version"], { cwd: repository, encoding: "utf8" }).trim(),
+): { file: string; args: string[]; env?: Record<string, string> } {
   const configured = manifest(repository).packageManager;
+  const has = (file: string) => fs.existsSync(path.join(repository, file));
   const manager =
     typeof configured === "string"
       ? configured.split("@")[0]
-      : fs.existsSync(path.join(repository, "bun.lock")) ||
-          fs.existsSync(path.join(repository, "bun.lockb"))
+      : has("bun.lock") || has("bun.lockb")
         ? "bun"
-        : fs.existsSync(path.join(repository, "pnpm-lock.yaml"))
+        : has("pnpm-lock.yaml")
           ? "pnpm"
-          : fs.existsSync(path.join(repository, "yarn.lock"))
+          : has("yarn.lock")
             ? "yarn"
             : "npm";
-  if (!["bun", "pnpm", "npm"].includes(manager)) {
+  const sdk = "@databuddy/sdk@^3";
+  if (manager === "npm")
+    return { file: "npm", args: ["install", sdk, "--ignore-scripts", "--save-prod"] };
+  if (manager === "pnpm")
+    return {
+      file: "pnpm",
+      args: ["add", sdk, "--ignore-scripts", "--ignore-pnpmfile", "--save-prod"],
+    };
+  if (manager === "bun") return { file: "bun", args: ["add", sdk, "--ignore-scripts"] };
+  if (manager !== "yarn")
     throw new Error(
-      "Automatic SDK installation supports bun, pnpm and npm. Install @databuddy/sdk with your package manager, then rerun --apply.",
+      `Automatic SDK installation supports npm, pnpm, bun and yarn, not ${manager}. Install @databuddy/sdk yourself, then rerun --apply.`,
     );
-  }
+  const version =
+    typeof configured === "string" && configured.includes("@")
+      ? configured.split("@")[1]
+      : yarnVersion();
+  if (Number(version.split(".")[0]) <= 1)
+    return { file: "yarn", args: ["add", sdk, "--ignore-scripts"] };
+  // Yarn 2+ installs with Plug'n'Play unless nodeLinker is node-modules, and
+  // without node_modules the installed SDK cannot be verified.
+  const yarnrc = has(".yarnrc.yml")
+    ? fs.readFileSync(path.join(repository, ".yarnrc.yml"), "utf8")
+    : "";
+  if (has(".pnp.cjs") || !/^\s*nodeLinker:\s*["']?node-modules/m.test(yarnrc))
+    throw new Error(
+      "Yarn Plug'n'Play projects are not supported by --apply yet. Run --patch, apply the patch, and add @databuddy/sdk yourself.",
+    );
+  return {
+    file: "yarn",
+    args: ["add", sdk, "--mode=skip-build"],
+    env: { YARN_ENABLE_SCRIPTS: "0" },
+  };
+}
+
+async function installSdk(repository: string, signal?: AbortSignal): Promise<string> {
+  const existing = installedSdk(repository);
+  if (existing) return existing;
+  const command = sdkInstallCommand(repository);
+  const manager = command.file;
   try {
-    await promisify(execFile)(
-      manager,
-      [
-        manager === "npm" ? "install" : "add",
-        // The reference and validation target SDK 3.x; never pull a future major.
-        "@databuddy/sdk@^3",
-        "--ignore-scripts",
-        ...(manager === "pnpm" ? ["--ignore-pnpmfile"] : []),
-        ...(manager === "bun" ? [] : ["--save-prod"]),
-      ],
-      { cwd: repository, signal, timeout: 300_000, maxBuffer: 2 * 1024 * 1024 },
-    );
+    await promisify(execFile)(command.file, command.args, {
+      cwd: repository,
+      signal,
+      timeout: 300_000,
+      maxBuffer: 2 * 1024 * 1024,
+      ...(command.env ? { env: { ...process.env, ...command.env } } : {}),
+    });
   } catch (error) {
     signal?.throwIfAborted();
     // Surface the package manager's own explanation (store or lockfile
