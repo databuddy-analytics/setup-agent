@@ -39,6 +39,8 @@ import { createSetupRedactor } from "./terminal.js";
 interface DatabuddySetupOptions {
   repository: string;
   apply?: boolean;
+  /** Stop after the reviewed diff is saved: no install and no source writes. */
+  patchOnly?: boolean;
   maxCostUsd?: number;
   installSdk?: (repository: string, signal?: AbortSignal) => Promise<string>;
   request: DatabuddySetupRequest;
@@ -447,11 +449,22 @@ function sourceHashes(contents: Map<string, string>): Record<string, string> {
   return hashes;
 }
 
+// Only ordinary component and module code is editable. Files that run at
+// build, start or request time, or configure the toolchain, would let injected
+// code past a model review execute on the next build or --check.
+const EDITABLE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".astro"]);
+const EXECUTABLE_PATH =
+  /(?:^|\/)(?:middleware|proxy|instrumentation(?:-client)?)\.[cm]?[jt]sx?$|\.config\.[cm]?[jt]sx?$|(?:^|\/)(?:scripts|bin|tools)\//;
+
 function assertEditPath(repository: string, file: string): void {
   assertSafeFilePath(file);
   if (!isSourcePath(file) || path.basename(file) === "package.json")
     throw new Error(
       "Edits must target included source paths; dependency manifests, hidden, generated and credential paths cannot be edited by the model",
+    );
+  if (!EDITABLE_EXTENSIONS.has(path.extname(file)) || EXECUTABLE_PATH.test(file))
+    throw new Error(
+      `${file} cannot be edited: only component and module code is editable, never config, middleware, instrumentation, scripts, JSON, YAML or TOML`,
     );
   let absolute = repository;
   const segments = file.split("/");
@@ -483,6 +496,8 @@ function validateChanges(
   let bytes = 0;
   return proposal.changes.map((change) => {
     assertEditPath(repository, change.path);
+    if (change.content.startsWith("#!"))
+      throw new Error(`${change.path} cannot be edited: executable scripts are not editable`);
     if (!request.products.includes(change.product) || !["sdk", "events"].includes(change.product))
       throw new Error("Edits may cover only requested SDK/custom-event products");
     if (seen.has(change.path.toLowerCase())) throw new Error("Edit paths must be unique");
@@ -1054,6 +1069,13 @@ export async function runDatabuddySetup(
       }
       atomicWriteFileSync(diffFile, diff, { mode: 0o600 });
       fs.rmSync(rejectedFile, { force: true });
+      // The reviewing checkpoint already holds the passed review, so a later
+      // --apply applies exactly this patch without another model call.
+      if (options.patchOnly)
+        return DatabuddySetupResultSchema.parse({
+          ...result,
+          patch: { diff: ".databuddy/setup.patch", files: changes.length, sourceReview: review },
+        });
       const journal: ApplyCheckpoint = {
         version: 1,
         fingerprint,

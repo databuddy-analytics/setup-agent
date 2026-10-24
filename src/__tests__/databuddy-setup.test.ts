@@ -647,6 +647,50 @@ describe("Databuddy setup implementation", () => {
     expect(resumed).toEqual(result);
   });
 
+  it("saves a reviewed patch without installing or writing, then applies it without model calls", async () => {
+    const repository = fixture();
+    const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
+    const proposal = implementation();
+    const runTask: RunTask = async ({ prompt }) => {
+      if (prompt.startsWith("Generate the smallest")) return JSON.stringify(proposal);
+      if (prompt.startsWith("Independently verify")) return JSON.stringify(sourceReview());
+      return JSON.stringify(plan());
+    };
+    const patched = await runDatabuddySetup({
+      repository,
+      request,
+      apply: true,
+      patchOnly: true,
+      runTask,
+      installSdk: async () => {
+        throw new Error("--patch must not install dependencies");
+      },
+    });
+    expect(patched.phases.implementation).toBe("pending");
+    expect(patched.patch).toMatchObject({
+      diff: ".databuddy/setup.patch",
+      files: proposal.changes.length,
+    });
+    expect(fs.readFileSync(path.join(repository, ".databuddy/setup.patch"), "utf8")).toContain(
+      "app/analytics.ts",
+    );
+    expect(fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8")).toBe(actionsBefore);
+    expect(fs.existsSync(path.join(repository, "app/analytics.ts"))).toBe(false);
+
+    const applied = await runDatabuddySetup({
+      repository,
+      request,
+      apply: true,
+      runTask: async () => {
+        throw new Error("Applying a reviewed patch must not call a model");
+      },
+      installSdk: async (target: string) => installFixtureSdk(target),
+    });
+    expect(applied.phases.implementation).toBe("complete");
+    for (const change of proposal.changes)
+      expect(fs.readFileSync(path.join(repository, change.path), "utf8")).toBe(change.content);
+  });
+
   it("bounds independent review repair and leaves customer files untouched when review fails", async () => {
     const repository = fixture();
     const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
@@ -725,6 +769,13 @@ describe("Databuddy setup implementation", () => {
       "private/hidden.ts",
       "linked.ts",
       "app/layout.tsx",
+      // Files that execute at build or request time, or configure the toolchain.
+      "next.config.mjs",
+      "middleware.ts",
+      "src/instrumentation.ts",
+      "scripts/postbuild.js",
+      "tsconfig.json",
+      "vercel.json",
     ];
     for (const target of excluded) {
       const repository = fixture();

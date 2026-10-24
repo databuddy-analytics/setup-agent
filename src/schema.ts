@@ -235,6 +235,15 @@ export const DatabuddySetupResultSchema = z
       })
       .strict()
       .optional(),
+    // A reviewed diff saved by --patch; nothing was installed or written.
+    patch: z
+      .object({
+        diff: z.literal(".databuddy/setup.patch"),
+        files: z.number().int().min(0).max(40),
+        sourceReview: DatabuddySetupSourceReviewSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(
@@ -246,6 +255,12 @@ export const DatabuddySetupResultSchema = z
       message:
         "Completed implementation requires an applied-file record and a passing source review",
     },
+  )
+  .refine(
+    (result) =>
+      result.patch === undefined ||
+      (result.phases.implementation === "pending" && result.patch.sourceReview.passed),
+    { message: "A saved patch must be reviewed and not yet applied" },
   );
 
 const journalSchema = z

@@ -14,8 +14,9 @@ It has three commands:
   as a structured recommendation anchored on the source line that justifies
   it. An optional action scan can map every user action first.
 - `databuddy setup` plans SDK placement and custom events around one user
-  journey. With `--apply` in a Next.js app it installs the SDK and writes
-  edits that a separate reviewer has approved.
+  journey. In a Next.js app, `--patch` writes the implementation as a diff a
+  separate reviewer has approved, without changing anything, and `--apply`
+  installs the SDK and writes those edits.
 - `databuddy diagnose` answers one question about existing instrumentation
   with quoted evidence and an independent verdict for every finding.
 
@@ -102,6 +103,17 @@ user-level config (`~/.codex/config.toml`), and the command says so before
 asking. It uses the agent's own `mcp add` command and leaves an existing
 `databuddy` entry unchanged. Sign in afterwards with `/mcp` in Claude Code or
 `codex mcp login databuddy`.
+
+## Review edits before they land
+
+`setup --patch` implements the plan, has a separate reviewer check it, and
+saves the result to `.databuddy/setup.patch` without installing the SDK or
+touching your source. Read the patch, then run the same command with `--apply`
+in place of `--patch` to apply exactly that reviewed patch with no further
+model calls. Edits are limited to component and module code (`.ts`, `.tsx`,
+`.js`, `.jsx`, `.vue`, `.svelte`, `.astro`); config files, middleware,
+instrumentation, scripts, and JSON, YAML or TOML files are never edited, so
+nothing the model writes runs at build or start time on its own.
 
 ## Check applied edits
 

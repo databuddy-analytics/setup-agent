@@ -42,6 +42,7 @@ interface SetupCliOptions extends AgentCliOptions {
   journey: string;
   products: SetupProduct[];
   apply: boolean;
+  patch: boolean;
   check: string[];
 }
 
@@ -258,6 +259,11 @@ const setup = program
     ["sdk", "events"],
   )
   .option(
+    "--patch",
+    "Implement and independently review the edits, then save them to .databuddy/setup.patch without installing anything or changing source; a later --apply applies that reviewed patch",
+    false,
+  )
+  .option(
     "--check <command>",
     "With --apply, run this verification command in the repository afterwards, such as a typecheck or formatter check (repeatable)",
     collectRepeatable,
@@ -271,9 +277,14 @@ addAgentOptions(setup).action((repository: string, options: SetupCliOptions) =>
     async (context) => {
       if (options.check.length && !options.apply)
         throw new InvalidArgumentError("--check runs after applied edits; add --apply.");
+      if (options.patch && options.apply)
+        throw new InvalidArgumentError(
+          "Choose --patch to save a reviewed diff, or --apply to apply it.",
+        );
       const result = await runDatabuddySetup({
         repository,
-        apply: options.apply,
+        apply: options.apply || options.patch,
+        patchOnly: options.patch,
         request: {
           websiteId: options.website,
           journey: options.journey,

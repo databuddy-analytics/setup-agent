@@ -45,8 +45,10 @@ Read stdout as one JSON result. Progress and errors are written to stderr.
 The artifact includes the request, source-backed steps, custom-event
 proposals, verification instructions, unknowns, and phase status.
 
-Report phase status and unresolved work. Use `--apply` when the user has
-requested implementation of SDK/custom events. Flags, AI-agent analytics,
+Report phase status and unresolved work. When the user wants SDK/custom
+events implemented, run `--patch` first and show them `.databuddy/setup.patch`;
+run `--apply` (with the same other options) only after they approve it, which
+applies that reviewed patch without new model calls. Flags, AI-agent analytics,
 and MCP remain planning-only. Applied source changes do not prove website
 access, an app build, or live delivery. Review event properties for sensitive data.
 
