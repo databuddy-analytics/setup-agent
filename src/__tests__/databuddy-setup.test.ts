@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enforceHunkReview, runDatabuddySetup } from "../databuddy-setup.js";
+import { enforceHunkReview, missingPlannedEvents, runDatabuddySetup } from "../databuddy-setup.js";
 import type {
   DatabuddySetupChanges,
   DatabuddySetupPlan,
@@ -1108,5 +1108,31 @@ describe("source review hunk accounting", () => {
     expect(review.issues).toEqual([
       "components/cart/modal.tsx:72: remove this change; the requested setup does not need it (adds backdrop-blur-none to the cart modal)",
     ]);
+  });
+});
+
+describe("planned event coverage", () => {
+  it("names planned events the proposal never sends, counting events already in source", () => {
+    const base = plan();
+    const withStageChange: DatabuddySetupPlan = {
+      ...base,
+      events: [...base.events, { ...base.events[0], name: "deal_stage_changed" }],
+    };
+    const changes = [
+      {
+        path: "app/actions.ts",
+        content: 'await track("signup_completed", { method: "password" });',
+      },
+    ];
+    expect(missingPlannedEvents(withStageChange, changes, new Map())).toEqual([
+      "deal_stage_changed",
+    ]);
+    expect(
+      missingPlannedEvents(
+        withStageChange,
+        changes,
+        new Map([["lib/stage.ts", "client.track({ name: 'deal_stage_changed' });"]]),
+      ),
+    ).toEqual([]);
   });
 });

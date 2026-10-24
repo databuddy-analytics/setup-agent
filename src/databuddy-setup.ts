@@ -550,6 +550,23 @@ function candidateDiff(temporary: string, snapshot: string, changes: ApplyChange
   return command(["diff", "--no-ext-diff", "--no-textconv", "--"]);
 }
 
+/**
+ * Planned events whose name appears in neither the proposed files nor the
+ * existing source. Checked before review, because a missing event was the
+ * most common reason a reviewer rejected a proposal.
+ */
+export function missingPlannedEvents(
+  plan: DatabuddySetupPlan,
+  changes: { path: string; content: string }[],
+  contents: Map<string, string>,
+): string[] {
+  const changed = new Map(changes.map((change) => [change.path, change.content]));
+  const sources = [...new Map([...contents, ...changed]).values()];
+  return plan.events
+    .map((event) => event.name)
+    .filter((name) => !sources.some((source) => new RegExp(`["'\`]${name}["'\`]`).test(source)));
+}
+
 interface DiffHunk {
   id: string;
   location: string;
@@ -967,6 +984,17 @@ export async function runDatabuddySetup(
           if (lastAttempt(attempt)) throw error;
           correction =
             "The previous proposal failed path, schema, product, or secret validation. Correct it and return only safe source edits.";
+          continue;
+        }
+        const missing = missingPlannedEvents(plan, changes, contents);
+        if (missing.length) {
+          if (lastAttempt(attempt))
+            throw new Error(
+              `Implementation never sends planned events after ${IMPLEMENTATION_ATTEMPTS} attempts: ${missing.join(", ")}`,
+            );
+          rejectWith([
+            `The proposal never sends these planned events; add each one at its planned evidence: ${missing.join(", ")}`,
+          ]);
           continue;
         }
       }
