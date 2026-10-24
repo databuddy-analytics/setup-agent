@@ -169,3 +169,28 @@ export function excludeStateDirFromGit(repository: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${current && !current.endsWith("\n") ? "\n" : ""}.databuddy/\n`);
 }
+
+/**
+ * Write exactly what a model task would receive, without any model call, so
+ * a user can audit it first: the filtered, redacted files, plus which ones the
+ * redaction changed.
+ */
+export function exportSnapshot(
+  repository: string,
+  files: string[],
+  out: string,
+  redact: (value: string) => string,
+): { files: number; redactedFiles: string[] } {
+  if (fs.existsSync(out) && fs.readdirSync(out).length)
+    throw new Error(`${out} is not empty; choose a new or empty directory`);
+  const contents = readSource(repository, files);
+  const redactedFiles: string[] = [];
+  for (const [file, source] of contents) {
+    const target = path.join(out, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const redacted = redact(source);
+    if (redacted !== source) redactedFiles.push(file);
+    fs.writeFileSync(target, redacted, { mode: 0o600 });
+  }
+  return { files: contents.size, redactedFiles };
+}

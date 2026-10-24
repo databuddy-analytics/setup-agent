@@ -6,7 +6,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { excludeStateDirFromGit, isSourcePath, readSource } from "../repository-snapshot.js";
+import {
+  excludeStateDirFromGit,
+  exportSnapshot,
+  isSourcePath,
+  readSource,
+} from "../repository-snapshot.js";
 import { createSetupRedactor, normalizeTerminalLine } from "../terminal.js";
 
 describe("terminal output", () => {
@@ -79,6 +84,29 @@ describe("terminal output", () => {
     const output = redact(leaks.join("\n"));
     for (const secret of ["hunter2", "s3cr3t", "pa55", mailgun, awsSecret])
       expect(output).not.toContain(secret);
+    // Formats a re-review showed reaching the model.
+    const sendgrid = fake("SG.", "abcdefghijklmnop1234", ".", "qrstuvwxyzABCDEFGH5678");
+    const gitlab = fake("glpat-", "abcdefghij1234567890");
+    const more = [
+      `const dbPassword = "${fake("hunt", "er2x")}";`,
+      `headers: { Authorization: "Basic ${fake("dXNlcjpw", "YXNzd29yZA==")}" }`,
+      `define('DB_PASSWORD', '${fake("php", "-secret-1")}');`,
+      `const conn = "DefaultEndpointsProtocol=https;AccountName=x;AccountKey=${fake("abc123", "DEF456ghi789==")};";`,
+      `const signingKey = "${fake("0123456789", "abcdef0123456789abcdef01234567")}";`,
+      `const mail = "${sendgrid}";`,
+      `const gl = "${gitlab}";`,
+    ].join("\n");
+    const redactedMore = redact(more);
+    for (const secret of [
+      "hunter2x",
+      "dXNlcjpw",
+      "php-secret",
+      "abc123DEF",
+      "0123456789abcdef",
+      sendgrid,
+      gitlab,
+    ])
+      expect(redactedMore).not.toContain(secret);
     const ordinary = [
       'const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";',
       'const STORAGE_KEY = "databuddy_token";',
@@ -86,6 +114,7 @@ describe("terminal output", () => {
       '<div className="flex items-center gap-2 rounded-md">',
       'const id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";',
       "apiKey: process.env.STRIPE_SECRET_KEY,",
+      "// Basic authentication is handled by the proxy.",
     ].join("\n");
     expect(redact(ordinary)).toBe(ordinary);
   });
@@ -132,5 +161,19 @@ describe("terminal output", () => {
     expect(() =>
       excludeStateDirFromGit(fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-no-git-"))),
     ).not.toThrow();
+  });
+
+  it("exports the redacted snapshot for audit and never writes into a non-empty directory", () => {
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-export-"));
+    const key = ["AKIA", "IOSFODNN7", "EXAMPLE"].join("");
+    fs.writeFileSync(path.join(repository, "aws.ts"), `export const k = "${key}";\n`);
+    fs.writeFileSync(path.join(repository, "app.ts"), "export const ok = true;\n");
+    const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-export-out-")), "snap");
+    const result = exportSnapshot(repository, ["aws.ts", "app.ts"], out, createSetupRedactor({}));
+    expect(result).toEqual({ files: 2, redactedFiles: ["aws.ts"] });
+    expect(fs.readFileSync(path.join(out, "aws.ts"), "utf8")).not.toContain(key);
+    expect(() => exportSnapshot(repository, ["app.ts"], out, createSetupRedactor({}))).toThrow(
+      "not empty",
+    );
   });
 });

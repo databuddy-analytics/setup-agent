@@ -33,6 +33,10 @@ const TOKEN_PATTERNS: RegExp[] = [
   /\bnpm_[A-Za-z0-9]{36}\b/g,
   /\bre_[A-Za-z0-9]{8}_[A-Za-z0-9]{20,}\b/g,
   /\bkey-[0-9a-f]{32}\b/g,
+  /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
+  // Basic auth credentials look like base64: a digit or trailing padding, so prose is left alone.
+  /\bBasic\s+(?=[A-Za-z0-9+/]*(?:\d|=))[A-Za-z0-9+/]{8,}={0,2}/g,
 ];
 
 // Patterns that keep a prefix (the URL scheme and user, or the key name).
@@ -49,6 +53,23 @@ const PREFIXED_PATTERNS: [RegExp, string][] = [
     /(\b[\w$]*(?:pass(?:word|wd)?|pwd|secret|token|api_?key|access_?key|private_?key|credential)[\w$]*["']?\s*[:=]\s*["'`])(?=[^"'`\s]*\d)(?=[^"'`\s]*[A-Za-z])[^"'`\s]{10,}(?=["'`])/gi,
     "$1[REDACTED]",
   ],
+  // Password-named values are redacted at any length of six or more.
+  [
+    /(\b[\w$]*(?:pass(?:word|wd)?|pwd)[\w$]*["']?\s*[:=]\s*["'`])[^"'`\s]{6,}(?=["'`])/gi,
+    "$1[REDACTED]",
+  ],
+  // Signing, HMAC, encryption and master keys assigned a quoted value.
+  [
+    /(\b[\w$]*(?:signing|hmac|encryption|master|webhook)_?(?:key|secret)[\w$]*["']?\s*[:=]\s*["'`])[^"'`\s]{8,}(?=["'`])/gi,
+    "$1[REDACTED]",
+  ],
+  // PHP define('DB_PASSWORD', '...') and similar constants.
+  [
+    /(\bdefine\(\s*["'][A-Z0-9_]*(?:PASS|PWD|SECRET|TOKEN|KEY|SALT)[A-Z0-9_]*["']\s*,\s*["'])[^"']+(?=["'])/g,
+    "$1[REDACTED]",
+  ],
+  // Connection-string secrets: Password=...; AccountKey=...; SharedAccessKey=...
+  [/(\b(?:Password|Pwd|AccountKey|SharedAccessKey)\s*=\s*)[^;"'\s]+/gi, "$1[REDACTED]"],
   // Unquoted values for secret-named keys in YAML, TOML, INI and env files.
   [
     /^(\s*[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*\s*[:=]\s*)(?!["'`$({]|(?:process|import|Deno|Bun)\.)([^\s,;()]{8,})\s*$/gim,
