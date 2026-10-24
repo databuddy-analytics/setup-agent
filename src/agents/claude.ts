@@ -1,6 +1,8 @@
 // Derived from DeepSec (https://github.com/vercel-labs/deepsec), Copyright 2026 Vercel, Inc.
 // and contributors, licensed under Apache-2.0. Modified by Databuddy; see NOTICE.
-import { query, type SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
+import fs from "node:fs";
+import path from "node:path";
+import { type PermissionResult, query, type SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
 import { findAgentExecutable } from "../model.js";
 import type { BatchMeta, SetupTaskParams } from "./types.js";
 
@@ -81,6 +83,63 @@ function buildClaudeEnv(): Record<string, string> {
   return env;
 }
 
+function realRoots(root: string): string[] {
+  const roots = [path.resolve(root)];
+  try {
+    roots.push(fs.realpathSync(root));
+  } catch {
+    // A missing snapshot simply matches nothing.
+  }
+  return roots;
+}
+
+function within(roots: string[], base: string, target: string): boolean {
+  const resolved = path.resolve(base, target);
+  return roots.some((root) => {
+    const relative = path.relative(root, resolved);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  });
+}
+
+/**
+ * Allow Read, Glob and Grep only inside the snapshot. Paths are resolved
+ * against the snapshot, so absolute paths, `..` and home-relative patterns
+ * that leave it are refused; the snapshot itself contains no symlinks.
+ */
+export function snapshotToolDecision(
+  root: string,
+  toolName: string,
+  input: Record<string, unknown>,
+): PermissionResult {
+  const roots = realRoots(root);
+  const deny = (target: string): PermissionResult => ({
+    behavior: "deny",
+    message: `Only files inside the repository snapshot can be read; ${target} is outside it.`,
+  });
+  const text = (key: string) =>
+    typeof input[key] === "string" ? (input[key] as string) : undefined;
+  const escapes = (pattern: string) =>
+    pattern.startsWith("~") || pattern.split(/[\\/]/).includes("..");
+  if (toolName === "Read") {
+    const file = text("file_path");
+    return file && within(roots, root, file)
+      ? { behavior: "allow", updatedInput: input }
+      : deny(file ?? "that path");
+  }
+  if (toolName === "Glob" || toolName === "Grep") {
+    const base = text("path") ?? root;
+    if (!within(roots, root, base) || base.startsWith("~")) return deny(base);
+    const pattern = toolName === "Glob" ? text("pattern") : text("glob");
+    if (
+      pattern &&
+      (escapes(pattern) || (path.isAbsolute(pattern) && !within(roots, root, pattern)))
+    )
+      return deny(pattern);
+    return { behavior: "allow", updatedInput: input };
+  }
+  return { behavior: "deny", message: `${toolName} is not available to this read-only task.` };
+}
+
 type ClaudeEffort = "low" | "medium" | "high" | "max";
 
 /**
@@ -115,8 +174,14 @@ export async function runClaudeSetupTask(params: SetupTaskParams): Promise<strin
       options: {
         cwd: params.projectRoot,
         tools: ["Read", "Glob", "Grep"],
-        allowedTools: ["Read", "Glob", "Grep"],
-        permissionMode: "dontAsk",
+        // No allowedTools: they are approved without canUseTool, which is
+        // what confines every read to the snapshot.
+        permissionMode: "default",
+        canUseTool: async (toolName, input) =>
+          snapshotToolDecision(params.projectRoot, toolName, input),
+        // Load no user or project settings, so the user's own allow rules,
+        // hooks and plugins cannot widen or observe the task.
+        settingSources: [],
         maxTurns: (params.config.maxTurns as number) ?? 40,
         model,
         ...(params.resumeAgentSessionId ? { resume: params.resumeAgentSessionId } : {}),

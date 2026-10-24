@@ -18,6 +18,50 @@ const DEFAULT_MODEL = "gpt-6-sol";
 const DEFAULT_EFFORT: ModelReasoningEffort = "xhigh";
 
 /**
+ * Codex's read-only sandbox blocks writes but still lets commands read any
+ * file the user can, so a prompt injection in the repository could pull in
+ * ~/.ssh or a .env from elsewhere. This permission profile lets commands read
+ * only the workspace (the redacted snapshot) and the platform paths tools
+ * need, with no network. Codex enforces it with Seatbelt on macOS and
+ * bubblewrap on Linux, and refuses to run a command it cannot sandbox. It
+ * must not be combined with --sandbox, which makes Codex ignore profiles.
+ */
+export function snapshotPermissionProfile(codexExecutable?: string): string {
+  // Codex re-executes its own binary inside the sandbox for some helpers, so
+  // the install it runs from must stay readable.
+  const installs = codexExecutable
+    ? [
+        ...new Set([
+          path.dirname(codexExecutable),
+          path.dirname(path.dirname(fs.realpathSync(codexExecutable))),
+        ]),
+      ]
+    : [];
+  return [
+    // A repository's AGENTS.md is untrusted text, but Codex would load it as
+    // trusted instructions; the agent reads it as ordinary source instead.
+    "project_doc_max_bytes = 0",
+    'default_permissions = "databuddy-snapshot"',
+    "",
+    "[permissions.databuddy-snapshot.filesystem]",
+    '":root" = "deny"',
+    '":minimal" = "read"',
+    // The minimal set leaves /tmp readable, and the snapshot's siblings live
+    // in $TMPDIR; the workspace root below is more specific and stays readable.
+    '":slash_tmp" = "deny"',
+    '":tmpdir" = "deny"',
+    ...installs.map((dir) => `${JSON.stringify(dir)} = "read"`),
+    "",
+    '[permissions.databuddy-snapshot.filesystem.":workspace_roots"]',
+    '"." = "read"',
+    "",
+    "[permissions.databuddy-snapshot.network]",
+    "enabled = false",
+    "",
+  ].join("\n");
+}
+
+/**
  * The codex CLI persists thread state to `$CODEX_HOME/sessions/` (defaulting
  * to `~/.codex`). Multiple concurrent codex CLI processes within one host
  * stomp on each other's session DB — empirically observed as ~99% of runs
@@ -32,7 +76,13 @@ const DEFAULT_EFFORT: ModelReasoningEffort = "xhigh";
 // target already exists), which closes the symlink-clobber race a
 // pre-creating local attacker would otherwise win.
 function makeCodexHome(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
+  fs.writeFileSync(
+    path.join(home, "config.toml"),
+    snapshotPermissionProfile(findAgentExecutable("codex")),
+    { mode: 0o600 },
+  );
+  return home;
 }
 
 /**
@@ -372,7 +422,7 @@ function mapUsage(usage: CodexUsage) {
 function codexEnvironmentPreamble(projectRoot: string): string {
   return `## Environment
 
-You are running inside the Codex CLI in a read-only sandbox with no network access.
+You are running inside the Codex CLI in a sandbox that can read only the project root below and has no network access.
 
 - **Project root** (the codebase under investigation): \`${projectRoot}\`
   - File paths in the "Target Files" list below are RELATIVE to this root.
@@ -420,9 +470,9 @@ export async function runCodexSetupTask(params: SetupTaskParams): Promise<string
       model,
       workingDirectory: params.projectRoot,
       skipGitRepoCheck: true,
-      sandboxMode: "read-only" as const,
+      // No sandboxMode or networkAccessEnabled: both select Codex's legacy
+      // sandbox, which would override the snapshot-only permission profile.
       approvalPolicy: "never" as const,
-      networkAccessEnabled: false,
       modelReasoningEffort: effort,
       webSearchEnabled: false,
     };

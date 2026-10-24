@@ -41,7 +41,7 @@
     "typecheck": "tsc --noEmit",
     "bundle": "node build.mjs",
     "test": "vitest run",
-    "test:live": "LIVE_AGENT=1 vitest run test/live-diagnosis.test.ts",
+    "test:live": "LIVE_AGENT=1 vitest run test/live-diagnosis.test.ts test/live-confinement.test.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "knip": "knip",
