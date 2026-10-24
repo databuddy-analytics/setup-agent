@@ -1,5 +1,6 @@
 // Derived from DeepSec (https://github.com/vercel-labs/deepsec), Copyright 2026 Vercel, Inc.
 // and contributors, licensed under Apache-2.0. Modified by Databuddy; see NOTICE.
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -255,7 +256,34 @@ function retainCodexHome(threadId: string, home: string): void {
   }
 }
 
+// The oldest Codex release whose permission profile confinement has been
+// verified live; an older CLI might ignore the profile and read the whole disk.
+const MIN_CODEX_VERSION = [0, 163, 0];
+let checkedCodex: string | undefined;
+
+export function assertCodexVersion(
+  executable: string | undefined,
+  readVersion: (file: string) => string = (file) =>
+    execFileSync(file, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }),
+): void {
+  if (!executable || checkedCodex === executable) return;
+  const output = readVersion(executable);
+  const match = /(\d+)\.(\d+)\.(\d+)/.exec(output);
+  const version = match ? match.slice(1).map(Number) : undefined;
+  const older = (a: number[], b: number[]) => {
+    for (let index = 0; index < b.length; index++)
+      if (a[index] !== b[index]) return a[index] < b[index];
+    return false;
+  };
+  if (!version || older(version, MIN_CODEX_VERSION))
+    throw new Error(
+      `Codex ${match?.[0] ?? "of an unknown version"} is older than ${MIN_CODEX_VERSION.join(".")}, the oldest release whose read-only confinement this tool has verified. Upgrade Codex or use --agent claude.`,
+    );
+  checkedCodex = executable;
+}
+
 function buildCodexInvocation(existingHome?: string): CodexInvocation {
+  assertCodexVersion(findAgentExecutable("codex"));
   // An explicit OPENAI_API_KEY selects API billing; otherwise reuse the
   // machine's `codex login` session through a mirrored auth.json.
   const apiKey = process.env.OPENAI_API_KEY;
@@ -391,13 +419,18 @@ function itemToProgress(item: ThreadItem): AgentProgress | undefined {
  * Per-1M-token rates for cost estimation. Codex (OpenAI Responses API)
  * doesn't return cost like Anthropic does, so we compute it here.
  *
- * Source: https://developers.openai.com/api/docs/pricing (April 2026).
- * Update when OpenAI repprices or new GPT-5.x SKUs ship.
+ * Source: https://developers.openai.com/api/docs/pricing (GPT-5.x April 2026,
+ * GPT-6 standard short-context rates October 2026). Update when OpenAI
+ * reprices or new SKUs ship.
  */
 const MODEL_PRICING_USD_PER_M_TOKENS: Record<
   string,
   { input: number; cachedInput: number; output: number }
 > = {
+  "gpt-6-astra": { input: 10.0, cachedInput: 1.0, output: 50.0 },
+  "gpt-6-sol": { input: 2.0, cachedInput: 0.2, output: 10.0 },
+  "gpt-6-luna": { input: 0.1, cachedInput: 0.01, output: 0.5 },
+  "gpt-6.1-sol": { input: 2.0, cachedInput: 0.1, output: 10.0 },
   "gpt-5.5": { input: 5.0, cachedInput: 0.5, output: 30.0 },
   "gpt-5.5-pro": { input: 30.0, cachedInput: 30.0, output: 180.0 }, // pro tier has no cached discount today
   "gpt-5.4": { input: 2.5, cachedInput: 0.25, output: 15.0 },

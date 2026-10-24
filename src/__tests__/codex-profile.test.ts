@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { codexInstallPaths, snapshotPermissionProfile } from "../agents/codex.js";
+import {
+  assertCodexVersion,
+  codexInstallPaths,
+  snapshotPermissionProfile,
+} from "../agents/codex.js";
 
 function install(...segments: string[]): { home: string; binary: string } {
   const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-home-")));
@@ -41,5 +45,15 @@ describe("Codex permission profile", () => {
       "project_doc_max_bytes = 0",
     ])
       expect(profile).toContain(line);
+  });
+
+  it("refuses a Codex older than the verified release, or one whose version it cannot read", () => {
+    const version = (output: string) => () => output;
+    expect(() => assertCodexVersion("/old/codex", version("codex-cli 0.150.2"))).toThrow(
+      "older than 0.163.0",
+    );
+    expect(() => assertCodexVersion("/odd/codex", version("codex"))).toThrow("unknown version");
+    expect(() => assertCodexVersion("/new/codex", version("codex-cli 0.163.0"))).not.toThrow();
+    expect(() => assertCodexVersion("/next/codex", version("codex-cli 1.2.0"))).not.toThrow();
   });
 });

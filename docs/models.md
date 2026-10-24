@@ -64,7 +64,7 @@ receives only an allowlisted environment plus the one credential it needs.
 
 API calls may incur provider charges. `--max-cost-usd` stops further tasks
 once the estimated cost reaches the limit; a task can exceed the limit
-before its cost is reported. Codex reports a cost only for models with known
-pricing, so a limit with any other Codex model, including the default
-`gpt-6-sol`, is refused before the run starts. `--timeout` is cooperative cancellation, not a spending
+before its cost is reported. Codex reports a cost only for models in the tool's
+pricing table (GPT-6 and GPT-5.4/5.5, at standard short-context rates), so a
+limit with any other Codex model is refused before the run starts. `--timeout` is cooperative cancellation, not a spending
 cap.

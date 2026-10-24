@@ -118,8 +118,10 @@ export function snapshotToolDecision(
   });
   const text = (key: string) =>
     typeof input[key] === "string" ? (input[key] as string) : undefined;
+  // Any "..", or a brace alternative such as {..,x} or {/etc,x} that starts
+  // outside the snapshot.
   const escapes = (pattern: string) =>
-    pattern.startsWith("~") || pattern.split(/[\\/]/).includes("..");
+    pattern.startsWith("~") || pattern.includes("..") || /[{,]\s*[~/\\]/.test(pattern);
   if (toolName === "Read") {
     const file = text("file_path");
     return file && within(roots, root, file)

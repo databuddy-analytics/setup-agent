@@ -26,11 +26,20 @@ describe.skipIf(process.env.LIVE_AGENT !== "1")("Codex snapshot confinement", ()
         encoding: "utf8",
       });
     expect(read("inside.txt").stdout).toBe("inside");
+    // A sibling of the workspace under $HOME, and the Codex home's own login.
+    const sibling = makeWorkDir("databuddy-sibling-");
+    fs.writeFileSync(path.join(sibling, "canary.txt"), "canary");
+    fs.writeFileSync(path.join(home, "auth.json"), '{"token":"canary"}');
     // /tmp is outside $TMPDIR on macOS and was readable before the profile denied it.
     const slashTmp = path.join("/tmp", `databuddy-canary-${process.pid}.txt`);
     fs.writeFileSync(slashTmp, "canary");
     try {
-      for (const file of [path.join(outside, "canary.txt"), slashTmp]) {
+      for (const file of [
+        path.join(outside, "canary.txt"),
+        slashTmp,
+        path.join(sibling, "canary.txt"),
+        path.join(home, "auth.json"),
+      ]) {
         const result = read(file);
         expect(result.stdout, file).not.toContain("canary");
         expect(result.stderr, file).toContain("Operation not permitted");

@@ -74,7 +74,7 @@ const ISSUE_PATTERNS: [RegExp, string][] = [
   [/Repository changed|Source changed/i, "source_changed"],
   [/implements Next\.js applications only|supports sdk and events only/i, "unsupported_apply"],
   [
-    /No (codex|claude) executable|login found|requires (OPENAI|ANTHROPIC)_API_KEY/i,
+    /No (codex|claude) executable|login found|requires (OPENAI|ANTHROPIC)_API_KEY|Codex .* is older than/i,
     "agent_unavailable",
   ],
   [/Local model authentication conflicts/i, "credential_conflict"],

@@ -23,6 +23,9 @@ describe("Claude snapshot confinement", () => {
     expect(allowed("Read", {})).toBe(false);
     expect(allowed("Glob", { pattern: `${os.homedir()}/.aws/*` })).toBe(false);
     expect(allowed("Glob", { pattern: "../**/*.env" })).toBe(false);
+    expect(allowed("Glob", { pattern: "{..,x}/*" })).toBe(false);
+    expect(allowed("Glob", { pattern: "{/etc,src}/*" })).toBe(false);
+    expect(allowed("Glob", { pattern: "src/{app,lib}/**/*.ts" })).toBe(true);
     expect(allowed("Glob", { pattern: "~/.ssh/*" })).toBe(false);
     expect(allowed("Grep", { pattern: "KEY", path: "/etc" })).toBe(false);
     expect(allowed("Grep", { pattern: "KEY", glob: "../../**/*" })).toBe(false);
