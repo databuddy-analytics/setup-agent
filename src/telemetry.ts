@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { describeError } from "./protocol.js";
 import { createSetupRedactor } from "./terminal.js";
 
 const TELEMETRY_URL = "https://api.databuddy.cc/public/v1/agent-telemetry";
@@ -175,7 +176,7 @@ export function runPayload(input: {
   let errorMessage: string | undefined;
   if (input.error !== undefined) {
     status = "failed";
-    const message = input.error instanceof Error ? input.error.message : String(input.error);
+    const message = describeError(input.error);
     errorMessage = sanitizeMessage(message, input.repository);
     issues.push({ type: issueCode(message), resolved: false });
   }

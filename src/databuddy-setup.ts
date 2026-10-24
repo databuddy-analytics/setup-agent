@@ -13,6 +13,7 @@ import type { AgentBackend } from "./model.js";
 import { extractJsonObject, isLiteralValue } from "./model-output.js";
 import {
   assertSafeFilePath,
+  excludeStateDirFromGit,
   isSourcePath,
   readSource,
   sourceFiles,
@@ -386,7 +387,8 @@ async function installSdk(repository: string, signal?: AbortSignal): Promise<str
       manager,
       [
         manager === "npm" ? "install" : "add",
-        "@databuddy/sdk",
+        // The reference and validation target SDK 3.x; never pull a future major.
+        "@databuddy/sdk@^3",
         "--ignore-scripts",
         ...(manager === "pnpm" ? ["--ignore-pnpmfile"] : []),
         ...(manager === "bun" ? [] : ["--save-prod"]),
@@ -695,6 +697,7 @@ export async function runDatabuddySetup(
   )
     throw new Error(".databuddy must be a directory inside the repository");
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  excludeStateDirFromGit(repository);
   const release = acquireSetupLock(stateDir);
   const stateFile = path.join(stateDir, "setup.json");
   const diffFile = path.join(stateDir, "setup.patch");

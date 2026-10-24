@@ -336,6 +336,7 @@ export const DatabuddyDiagnosisRequestSchema = z
   .strict();
 
 /** Structured action attached to a recommendation finding so a report can act on it. */
+// Extra keys a model adds to a recommendation are dropped rather than failing the run.
 const DatabuddyFindingRecommendationSchema = z
   .object({
     kind: DatabuddyRecommendationKindSchema,
@@ -350,7 +351,7 @@ const DatabuddyFindingRecommendationSchema = z
     steps: z.array(funnelStepSchema).min(2).max(10).optional(),
     target: funnelStepSchema.optional(),
   })
-  .strict();
+  .strip();
 
 const diagnosisFindingBaseSchema = z
   .object({

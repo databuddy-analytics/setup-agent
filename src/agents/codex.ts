@@ -383,6 +383,11 @@ const MODEL_PRICING_USD_PER_M_TOKENS: Record<
   "gpt-5.4-pro": { input: 30.0, cachedInput: 30.0, output: 180.0 },
 };
 
+/** Whether a run on this model reports an estimated cost a limit can use. */
+export function hasCodexPricing(model: string): boolean {
+  return model in MODEL_PRICING_USD_PER_M_TOKENS;
+}
+
 interface CodexUsage {
   input_tokens: number;
   cached_input_tokens: number;

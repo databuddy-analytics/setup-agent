@@ -1,11 +1,12 @@
 // Derived from DeepSec (https://github.com/vercel-labs/deepsec), Copyright 2026 Vercel, Inc.
 // and contributors, licensed under Apache-2.0. Modified by Databuddy; see NOTICE.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { isSourcePath, readSource } from "../repository-snapshot.js";
+import { excludeStateDirFromGit, isSourcePath, readSource } from "../repository-snapshot.js";
 import { createSetupRedactor, normalizeTerminalLine } from "../terminal.js";
 
 describe("terminal output", () => {
@@ -112,5 +113,24 @@ describe("terminal output", () => {
     fs.writeFileSync(path.join(repository, "app.ts"), "export const ok = true;\n");
     const contents = readSource(repository, ["firebase-adminsdk-x1.json", "app.ts"]);
     expect([...contents.keys()]).toEqual(["app.ts"]);
+  });
+
+  it("keeps .databuddy/ out of commits once, and leaves non-Git folders alone", () => {
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-exclude-"));
+    execFileSync("git", ["init", "--quiet"], { cwd: repository });
+    excludeStateDirFromGit(repository);
+    excludeStateDirFromGit(repository);
+    const exclude = fs.readFileSync(path.join(repository, ".git/info/exclude"), "utf8");
+    expect(exclude.split("\n").filter((line) => line === ".databuddy/")).toHaveLength(1);
+    fs.mkdirSync(path.join(repository, ".databuddy"));
+    fs.writeFileSync(path.join(repository, ".databuddy/setup.json"), "{}");
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: repository,
+      encoding: "utf8",
+    });
+    expect(status).not.toContain(".databuddy");
+    expect(() =>
+      excludeStateDirFromGit(fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-no-git-"))),
+    ).not.toThrow();
   });
 });

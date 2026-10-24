@@ -184,7 +184,7 @@ describe("bundle e2e", () => {
         path.join(bin, "npm"),
         `#!${process.execPath}\nconst fs = require("node:fs");
 const path = require("node:path");
-if (process.argv.slice(2).join(" ") !== "install @databuddy/sdk --ignore-scripts --save-prod") process.exit(2);
+if (process.argv.slice(2).join(" ") !== "install @databuddy/sdk@^3 --ignore-scripts --save-prod") process.exit(2);
 const failOnce = path.join(__dirname, "fail-once");
 if (fs.existsSync(failOnce)) { fs.rmSync(failOnce); console.error("npm error synthetic store mismatch"); process.exit(1); }
 const file = path.join(process.cwd(), "package.json");

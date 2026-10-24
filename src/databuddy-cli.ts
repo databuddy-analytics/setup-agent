@@ -3,6 +3,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Command, InvalidArgumentError, Option } from "commander";
 import packageJson from "../package.json" with { type: "json" };
+import { hasCodexPricing } from "./agents/codex.js";
 import { type RunSetupTaskParams, runSetupTask } from "./agents/run-task.js";
 import type { AgentProgress } from "./agents/types.js";
 import { runChecks } from "./checks.js";
@@ -20,7 +21,7 @@ import {
   THINKING_LEVELS,
   type ThinkingLevel,
 } from "./model.js";
-import { setupErrorExitCode } from "./protocol.js";
+import { describeError, setupErrorExitCode } from "./protocol.js";
 import type { DatabuddyReportArea } from "./schema.js";
 import { feedbackPayload, runPayload, sendTelemetry, telemetryMode } from "./telemetry.js";
 import { createSetupRedactor, normalizeTerminalLine } from "./terminal.js";
@@ -191,6 +192,16 @@ async function runAgentCommand(
     thinkingLevel: options.thinkingLevel,
     auth: options.modelAuth,
   });
+  // An unknown price would stop the run after one paid task and repeat that
+  // task on resume, so refuse a limit that cannot be enforced.
+  if (
+    options.maxCostUsd !== undefined &&
+    agentType === "codex" &&
+    !hasCodexPricing(String(config.model))
+  )
+    throw new InvalidArgumentError(
+      `--max-cost-usd cannot be enforced for ${config.model}: Codex reports no price for it. Choose a model with known pricing (such as gpt-5.5) or drop the limit.`,
+    );
   const controller = new AbortController();
   const cancel = () => controller.abort(new Error(`Databuddy ${name} cancelled.`));
   process.once("SIGINT", cancel);
@@ -449,6 +460,6 @@ program
   });
 
 program.parseAsync().catch((error: unknown) => {
-  process.stderr.write(`${redact(error instanceof Error ? error.message : String(error))}\n`);
+  process.stderr.write(`${redact(describeError(error))}\n`);
   process.exitCode = setupErrorExitCode(error);
 });

@@ -41,7 +41,7 @@ export function planMcpInstall(
       executable,
       args: ["mcp", "add", SERVER_NAME, "--url", DATABUDDY_MCP_URL],
       cwd,
-      writes: "your user-level Codex config (~/.codex/config.toml)",
+      writes: `your user-level Codex config (${(options.env?.CODEX_HOME ?? process.env.CODEX_HOME) ? path.join(options.env?.CODEX_HOME ?? process.env.CODEX_HOME ?? "", "config.toml") : "~/.codex/config.toml"})`,
       next: `Run \`codex mcp login ${SERVER_NAME}\` to sign in to Databuddy.`,
     };
   }

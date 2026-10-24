@@ -27,8 +27,9 @@ steps are still pending.
 ## Run it
 
 Use Node.js 22 or later, Git, and a signed-in `codex` or `claude` CLI. The
-package has no runtime dependencies, so `npx` (or `bunx`) starts it in a few
-seconds:
+package bundles everything except the exact-pinned `@databuddy/scan` used by
+the optional action scan, so `npx` (or `bunx`) installs about 6 MB and starts
+in a few seconds:
 
 ```bash
 npx @databuddy/setup-agent report /path/to/app \

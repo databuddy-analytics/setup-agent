@@ -34,9 +34,10 @@ Accepted reasoning levels are `minimal`, `low`, `medium`, `high`, and
 `--model-auth local` reuses the backend's existing machine login, so runs
 count against that subscription. Before the first model call, the local
 route refuses to start when `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-`ANTHROPIC_AUTH_TOKEN`, a provider base URL, or `AI_GATEWAY_API_KEY` is set,
-because any of them would silently move the run to API billing or another
-endpoint. Unset them for the invocation, or choose the API route.
+`ANTHROPIC_AUTH_TOKEN` or a provider base URL is set, because any of them
+would silently move the run to API billing or another endpoint.
+`AI_GATEWAY_API_KEY` is allowed: the agent never passes it to Codex or Claude,
+and the optional action scan uses it to send code to your own gateway. Unset them for the invocation, or choose the API route.
 
 `--model-auth api-key` bills the provider account directly and requires the
 backend's own key from the table above. Credentials stay in the environment;
@@ -49,6 +50,7 @@ receives only an allowlisted environment plus the one credential it needs.
 
 API calls may incur provider charges. `--max-cost-usd` stops further tasks
 once the estimated cost reaches the limit; a task can exceed the limit
-before its cost is reported, and a backend that reports no cost stops the
-run under a limit. `--timeout` is cooperative cancellation, not a spending
+before its cost is reported. Codex reports a cost only for models with known
+pricing, so a limit with any other Codex model, including the default
+`gpt-6-sol`, is refused before the run starts. `--timeout` is cooperative cancellation, not a spending
 cap.

@@ -146,3 +146,26 @@ export function assertSafeFilePath(filePath: string): void {
     }
   }
 }
+
+/**
+ * Keep `.databuddy/` (prompts, responses, plans) out of commits by listing it
+ * in the repository's local, uncommitted `.git/info/exclude`. Repositories
+ * without Git, or where Git cannot be asked, are left alone.
+ */
+export function excludeStateDirFromGit(repository: string): void {
+  let exclude: string;
+  try {
+    exclude = execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], {
+      cwd: repository,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return;
+  }
+  const file = path.resolve(repository, exclude);
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  if (current.split(/\r?\n/).some((line) => line.trim() === ".databuddy/")) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, `${current && !current.endsWith("\n") ? "\n" : ""}.databuddy/\n`);
+}

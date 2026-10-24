@@ -24,8 +24,9 @@ and, with `--apply`, separately reviewed SDK/custom-event edits and installation
    attempt.
 6. Confirm the source did not change during planning and atomically save
    the result to `.databuddy/setup.json`.
-7. With `--apply`, propose source edits in the snapshot and run a separate
-   read-only review, allowing one repair after rejection.
+7. With `--patch` or `--apply`, propose source edits in the snapshot and run
+   a separate read-only review, with up to three attempts; each retry gets
+   every issue raised so far. `--patch` stops here and saves the diff.
 8. Save a private source patch and interruption journal, install the SDK with
    scripts and pnpm hooks disabled, and apply edits while refusing source drift.
 

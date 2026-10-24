@@ -33,6 +33,7 @@ import {
 } from "./model-output.js";
 import {
   assertSafeFilePath,
+  excludeStateDirFromGit,
   readSource,
   sourceFiles,
   writeSnapshot,
@@ -411,6 +412,7 @@ export async function runDatabuddyReport(options: ReportOptions): Promise<Databu
   if (directory && (directory.isSymbolicLink() || !directory.isDirectory()))
     throw new Error(".databuddy must be a regular directory inside the repository");
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  excludeStateDirFromGit(repository);
   const release = acquireSetupLock(stateDir);
   let temporary: string | undefined;
   const timings: Record<string, number> = {};
@@ -828,7 +830,7 @@ const KIND_TITLES: Record<string, string> = {
 export function renderReportMarkdown(result: DatabuddyReportResult): string {
   const lines: string[] = [];
   lines.push(`# Databuddy utilization report`, "");
-  lines.push(`Repository: ${result.repository}`);
+  lines.push(`Repository: ${path.basename(result.repository)}`);
   lines.push(`Framework: ${result.framework}`);
   if (result.request.websiteId) lines.push(`Website: ${result.request.websiteId}`);
   if (result.request.journey) lines.push(`Journey: ${result.request.journey}`);
@@ -927,7 +929,21 @@ export function renderReportMarkdown(result: DatabuddyReportResult): string {
     }
   }
   lines.push("## Not verified", "");
-  for (const unknown of result.unknowns) lines.push(`- ${unknown}`);
+  // Areas restate the same limits in different words; list each once and keep
+  // the section short, with the full list in the JSON result.
+  const seen = new Set<string>();
+  const distinct = result.unknowns.filter((unknown) => {
+    const key = unknown
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  for (const unknown of distinct.slice(0, 8)) lines.push(`- ${unknown}`);
+  if (distinct.length > 8)
+    lines.push(`- ${distinct.length - 8} more are listed under unknowns in the JSON result.`);
   lines.push("");
   lines.push(
     `Timings (seconds): ${Object.entries(result.timings)
