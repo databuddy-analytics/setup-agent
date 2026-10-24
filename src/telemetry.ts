@@ -212,11 +212,17 @@ export function telemetryMode(
   env: NodeJS.ProcessEnv = process.env,
   disabledByFlag = false,
 ): "send" | "print" | "off" {
+  // Every off switch wins, including over print.
+  const off = (value: string | undefined) =>
+    value !== undefined && value !== "" && !["0", "false", "no"].includes(value.toLowerCase());
   const setting = env.DATABUDDY_TELEMETRY?.toLowerCase();
-  if (setting === "print") return "print";
-  if (disabledByFlag || env.DO_NOT_TRACK === "1" || ["0", "false", "off"].includes(setting ?? ""))
+  if (
+    disabledByFlag ||
+    off(env.DO_NOT_TRACK) ||
+    ["0", "false", "off", "no"].includes(setting ?? "")
+  )
     return "off";
-  return "send";
+  return setting === "print" ? "print" : "send";
 }
 
 /** Never throws and never delays a run by more than five seconds. */

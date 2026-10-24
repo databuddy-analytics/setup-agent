@@ -84,8 +84,8 @@ When the user hits a bug or has feedback about the setup agent, offer to
 send it with `npx @databuddy/setup-agent feedback "<their words>" --website
 <id> --category bug_report|feature_request|other`. Send only what the user
 agrees to; never include credentials or customer data. Runs with `--website`
-also send an anonymous outcome report unless the user passes
-`--no-telemetry`.
+also send an outcome report tied to that website ID (the README lists every
+field) unless the user passes `--no-telemetry`.
 
 ## Resume and privacy
 

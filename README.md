@@ -133,17 +133,26 @@ artifact under `checks`, and a failing check makes the command exit 1.
 
 ## Telemetry and feedback
 
-When you pass `--website`, `setup` and `report` send one short report to
-Databuddy after each run, so we can see which stacks the agent handles and
-where it fails. It contains the outcome, the steps that completed, typed
-issue codes such as `review_rejected` or `sdk_install_failed`, the first line
-of any error with file paths and credentials removed, the framework and
-package manager, which of a fixed list of well-known packages you use (for
-example `next`, `better-auth` or `stripe`; other dependency names are never
-sent), the agent backend and model, and finding and check counts. It never
-contains source code, file paths, repository names or prompts. Turn it off
-with `--no-telemetry`, `DATABUDDY_TELEMETRY=0` or `DO_NOT_TRACK=1`, or set
-`DATABUDDY_TELEMETRY=print` to see the exact payload without sending it.
+When you pass `--website` (which `setup` always requires), `setup` and
+`report` send one short report to Databuddy after each run, so we can see
+which stacks the agent handles and where it fails. It is tied to your website
+ID, so it is not anonymous. It contains exactly:
+
+- the website ID, CLI version, agent backend and model, OS, Node.js version and
+  run duration;
+- the outcome, the steps that completed, and typed issue codes such as
+  `review_rejected` or `sdk_install_failed`;
+- the first line of any error, with file paths and credentials removed;
+- the framework, package manager, and which of a fixed list of well-known
+  packages you use (for example `next`, `better-auth` or `stripe`; any other
+  dependency name is never sent);
+- counts of planned events, recommendations, findings, changed files and
+  passed or failed checks, and the installed SDK version.
+
+It never contains source code, file paths, repository names or prompts.
+`--no-telemetry`, `DATABUDDY_TELEMETRY=0` or any `DO_NOT_TRACK` value except
+`0` turns it off, and each of them wins over everything else.
+`DATABUDDY_TELEMETRY=print` shows the exact payload instead of sending it.
 
 Send a bug report, feature request or other feedback with:
 

@@ -50,6 +50,9 @@ describe("run telemetry", () => {
 
   it("honours every opt-out and never throws when the network fails", async () => {
     expect(telemetryMode({ DO_NOT_TRACK: "1" })).toBe("off");
+    expect(telemetryMode({ DO_NOT_TRACK: "true" })).toBe("off");
+    expect(telemetryMode({ DO_NOT_TRACK: "0" })).toBe("send");
+    expect(telemetryMode({ DATABUDDY_TELEMETRY: "print" }, true)).toBe("off");
     expect(telemetryMode({ DATABUDDY_TELEMETRY: "0" })).toBe("off");
     expect(telemetryMode({}, true)).toBe("off");
     expect(telemetryMode({ DATABUDDY_TELEMETRY: "print" })).toBe("print");
