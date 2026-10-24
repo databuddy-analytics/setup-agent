@@ -184,7 +184,9 @@ export async function runClaudeSetupTask(params: SetupTaskParams): Promise<strin
         settingSources: [],
         maxTurns: (params.config.maxTurns as number) ?? 40,
         model,
-        ...(params.resumeAgentSessionId ? { resume: params.resumeAgentSessionId } : {}),
+        // No transcript is written to ~/.claude/projects, so every task starts a
+        // fresh session; repair prompts already carry the earlier output.
+        persistSession: false,
         thinking: { type: "adaptive" },
         effort: resolveMainRunEffort(params.config),
         pathToClaudeCodeExecutable: findAgentExecutable("claude"),

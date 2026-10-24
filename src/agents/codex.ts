@@ -11,7 +11,7 @@ import {
   type ThreadItem,
 } from "@openai/codex-sdk";
 import { findAgentExecutable } from "../model.js";
-import { makeWorkDir, workRoot } from "../workdir.js";
+import { makeWorkDir } from "../workdir.js";
 import { classifyQuotaError, QuotaExhaustedError } from "./shared.js";
 import type { AgentProgress, BatchMeta, SetupTaskParams } from "./types.js";
 
@@ -30,18 +30,37 @@ const DEFAULT_EFFORT: ModelReasoningEffort = "xhigh";
 export function snapshotPermissionProfile(codexExecutable?: string): string {
   // Codex re-executes its own binary inside the sandbox for some helpers, so
   // the install it runs from must stay readable.
-  const installs = codexExecutable
-    ? [
-        ...new Set([
-          path.dirname(codexExecutable),
-          path.dirname(path.dirname(fs.realpathSync(codexExecutable))),
-        ]),
-      ]
-    : [];
+  return snapshotProfileText(codexInstallPaths(codexExecutable));
+}
+
+/**
+ * Directories Codex needs to re-execute itself: the one holding the binary on
+ * PATH and, when it is plainly a Codex package (a path segment names codex),
+ * the package root above the real binary. Never the home directory or one of
+ * its ancestors, which would widen what the model can read.
+ */
+export function codexInstallPaths(codexExecutable?: string, home = os.homedir()): string[] {
+  if (!codexExecutable) return [];
+  const real = fs.realpathSync(codexExecutable);
+  const root = path.dirname(path.dirname(real));
+  const candidates = [path.dirname(codexExecutable), path.dirname(real)];
+  if ([path.basename(root), path.basename(path.dirname(root))].some((name) => /codex/i.test(name)))
+    candidates.push(root);
+  const coversHome = (dir: string) => {
+    const relative = path.relative(dir, home);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  };
+  return [...new Set(candidates)].filter((dir) => !coversHome(dir));
+}
+
+function snapshotProfileText(installs: string[]): string {
   return [
     // A repository's AGENTS.md is untrusted text, but Codex would load it as
     // trusted instructions; the agent reads it as ordinary source instead.
     "project_doc_max_bytes = 0",
+    // A login shell sources the user's profile, re-exporting secrets the
+    // allowlisted environment removed, and a shell snapshot would save them.
+    "allow_login_shell = false",
     'default_permissions = "databuddy-snapshot"',
     "",
     "[permissions.databuddy-snapshot.filesystem]",
@@ -58,6 +77,9 @@ export function snapshotPermissionProfile(codexExecutable?: string): string {
     "",
     "[permissions.databuddy-snapshot.network]",
     "enabled = false",
+    "",
+    "[features]",
+    "shell_snapshot = false",
     "",
   ].join("\n");
 }
@@ -76,26 +98,7 @@ export function snapshotPermissionProfile(codexExecutable?: string): string {
 // mkdtempSync creates a 0700 directory atomically (and refuses if the
 // target already exists), which closes the symlink-clobber race a
 // pre-creating local attacker would otherwise win.
-const STALE_HOME_MS = 24 * 60 * 60 * 1000;
-
-// A run killed with SIGKILL cannot remove its home, which links to the user's
-// Codex login. No run lasts a day, so homes older than that are leftovers.
-function removeStaleCodexHomes(): void {
-  try {
-    for (const name of fs.readdirSync(workRoot())) {
-      if (!name.startsWith("codex-home-")) continue;
-      const dir = path.join(workRoot(), name);
-      const stat = fs.lstatSync(dir);
-      if (stat.isDirectory() && Date.now() - stat.mtimeMs > STALE_HOME_MS)
-        fs.rmSync(dir, { recursive: true, force: true });
-    }
-  } catch {
-    // Best effort: a sweep failure must never block a run.
-  }
-}
-
 function makeCodexHome(): string {
-  removeStaleCodexHomes();
   const home = makeWorkDir("codex-home-");
   fs.writeFileSync(
     path.join(home, "config.toml"),
