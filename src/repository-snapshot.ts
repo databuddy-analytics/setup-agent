@@ -58,9 +58,10 @@ export function isSourcePath(relative: string): boolean {
     !relative.endsWith(".d.ts") &&
     // Lockfiles are generated, often huge, and rewritten by the SDK installer.
     !LOCKFILES.has(path.basename(relative)) &&
-    !/(?:^|[._-])(?:credentials?|secrets?|tokens?|passwords?|api[-_]?keys?|private[-_]?keys?)(?:[._-]|$)/i.test(
+    !/(?:^|[._-])(?:credentials?|secrets?|tokens?|passwords?|api[-_]?keys?|private[-_]?keys?|service[-_]?accounts?)(?:[._-]|$)/i.test(
       path.basename(relative),
-    )
+    ) &&
+    !/^keys?\./i.test(path.basename(relative))
   );
 }
 

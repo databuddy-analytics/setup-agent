@@ -180,7 +180,9 @@ included as untrusted source material, not instructions. Source is limited
 to 1 MiB per file and 10 MiB in total.
 
 Review the source you permit the selected model provider to process.
-Snapshot filtering is not full filesystem isolation and cannot detect every
-secret embedded in otherwise valid source. Known environment credentials
-and token patterns are redacted, but this is not complete secret detection.
+Snapshot filtering is not full filesystem isolation. Every snapshot file is
+scanned for environment credential values, private key blocks, common
+provider key formats and long quoted values assigned to secret-named keys,
+and each match is redacted; `--apply` refuses to edit a file that contained
+one. Detection is pattern-based and cannot recognise every secret format.
 Treat the saved checkpoint and exported plan as private repository context.
