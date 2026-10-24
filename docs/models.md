@@ -11,7 +11,7 @@ reasoning effort is `medium`. Choose a model with `--model`; the identifier
 must be one the selected backend accepts.
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up" \
   --agent claude --thinking-level high

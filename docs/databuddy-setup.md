@@ -14,14 +14,12 @@ root and install the supported 3.x SDK through bun, pnpm, or npm with scripts
 and pnpm hooks disabled. Other products remain planning-only. Website
 authorization checks and runtime event delivery remain pending.
 
-## Run from this checkout
+## Run the command
 
-`@databuddy/setup-agent` is private and unpublished. Use Node.js 22 or later
-and Git with the workspace dependencies installed. From this
-repository's root:
+Use Node.js 22 or later, Git, and a signed-in `codex` or `claude` CLI:
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project"
 ```
@@ -34,7 +32,7 @@ The command writes one JSON artifact to stdout and redacted progress to
 stderr. Redirect stdout if you want another copy of the plan:
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project" \
   > setup-plan.json
@@ -54,7 +52,7 @@ for the application's own health, API, and marketing endpoints. Both are
 planning-only products:
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A user tries the new project editor" \
   --products sdk,events,flags

@@ -26,26 +26,25 @@ steps are still pending.
 
 ## Run it
 
-Use Node.js 22 or later, Git, the pnpm version pinned in `package.json`, and
-a signed-in `codex` or `claude` CLI. `@databuddy/setup-agent` is unpublished,
-so run it from this checkout:
+Use Node.js 22 or later, Git, and a signed-in `codex` or `claude` CLI. The
+package has no runtime dependencies, so `npx` (or `bunx`) starts it in a few
+seconds:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm databuddy report /path/to/app \
+npx @databuddy/setup-agent report /path/to/app \
   --journey "A visitor signs up and creates their first project" \
   --markdown report.md
 ```
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project" \
   --apply
 ```
 
 ```bash
-pnpm databuddy diagnose /path/to/repository \
+npx @databuddy/setup-agent diagnose /path/to/repository \
   --question "Which signup and checkout events can fire twice?" \
   --scope apps/web
 ```

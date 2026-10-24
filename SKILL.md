@@ -21,12 +21,13 @@ A supplied website ID identifies the target; it does not prove access to it.
 Use synthetic journeys and do not include customer data, credentials, or
 sensitive event properties in a request.
 
-## Run from the source checkout
+## Run the command
 
-This package is private and unpublished. Use the checkout's root script:
+Run the published package with `npx` (Node.js 22 or later). It drives the
+signed-in `codex` or `claude` CLI already on `PATH`:
 
 ```bash
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project"
 ```

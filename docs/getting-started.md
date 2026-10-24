@@ -12,17 +12,15 @@ SDK/custom-event edits; live telemetry verification remains pending.
 
 ## Prerequisites
 
-Use Node.js 22 or later, Git, the pnpm version pinned in the checkout's
-`package.json`, a signed-in `codex` or `claude` CLI, and an application whose
+Use Node.js 22 or later, Git, a signed-in `codex` or `claude` CLI, and an
+application whose
 source you permit that model provider to process. Have your intended Databuddy website ID and a concrete
 user journey ready.
 
-`@databuddy/setup-agent` is private and unpublished. Install and run from
-this source checkout; there is no public npm installation assumed here.
+Run the published package with `npx`:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm databuddy setup /path/to/next-app \
+npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up and creates their first project"
 ```
