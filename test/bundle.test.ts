@@ -185,6 +185,8 @@ describe("bundle e2e", () => {
         `#!${process.execPath}\nconst fs = require("node:fs");
 const path = require("node:path");
 if (process.argv.slice(2).join(" ") !== "install @databuddy/sdk --ignore-scripts --save-prod") process.exit(2);
+const failOnce = path.join(__dirname, "fail-once");
+if (fs.existsSync(failOnce)) { fs.rmSync(failOnce); console.error("npm error synthetic store mismatch"); process.exit(1); }
 const file = path.join(process.cwd(), "package.json");
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
 manifest.dependencies["@databuddy/sdk"] = "synthetic";
@@ -215,6 +217,10 @@ fs.writeFileSync(path.join(sdk, "package.json"), JSON.stringify({name:"@databudd
       const missingApply = runBundle(args, options);
       expect(missingApply.status).toBe(1);
       expect(missingApply.stderr).toContain("--apply");
+      fs.writeFileSync(path.join(bin, "fail-once"), "");
+      const failedInstall = runBundle([...args, "--apply"], options);
+      expect(failedInstall.status).toBe(1);
+      expect(failedInstall.stderr).toContain("npm error synthetic store mismatch");
       const applied = runBundle([...args, "--apply"], options);
       expect(applied.status, applied.stderr).toBe(0);
       const result = JSON.parse(applied.stdout);
@@ -231,6 +237,21 @@ fs.writeFileSync(path.join(sdk, "package.json"), JSON.stringify({name:"@databudd
       expect(cached.status, cached.stderr).toBe(0);
       expect(JSON.parse(cached.stdout)).toEqual(result);
       expect(cached.stderr).toBe("");
+      const checked = runBundle(
+        [
+          ...args,
+          "--apply",
+          "--check",
+          'node -e "process.exit(0)"',
+          "--check",
+          'node -e "process.exit(3)"',
+        ],
+        options,
+      );
+      expect(checked.status).toBe(1);
+      expect(
+        JSON.parse(checked.stdout).checks.map((check: { exitCode: number }) => check.exitCode),
+      ).toEqual([0, 3]);
     } finally {
       fs.rmSync(temporary, { recursive: true, force: true });
     }

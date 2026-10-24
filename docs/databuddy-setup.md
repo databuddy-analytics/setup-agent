@@ -143,6 +143,16 @@ stops further model calls when reported estimated cost reaches the limit;
 an individual call can exceed it. Costs include retries and repairs. If a
 provider reports no estimate, no additional paid task starts under a limit.
 
+## Review scope and checks
+
+The independent reviewer receives a numbered list of every hunk in the
+proposed diff and states which planned step or event each one serves. A hunk
+it marks unrelated, such as a restyle or reformat, becomes a rejection issue
+naming its file and line. The reviewer also rejects ignored plan
+requirements and missing planned event properties. After `--apply`, each
+`--check <command>` you pass runs in the repository and its exit code is
+recorded under `checks`; the agent does not run project tools otherwise.
+
 ## Resume and review privacy
 
 The checkpoint is `<repository>/.databuddy/setup.json`. Repeating the same

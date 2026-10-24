@@ -50,6 +50,13 @@ requested implementation of SDK/custom events. Flags, AI-agent analytics,
 and MCP remain planning-only. Applied source changes do not prove website
 access, an app build, or live delivery. Review event properties for sensitive data.
 
+## Hand off to the user's agent
+
+After a successful run, offer `npx @databuddy/setup-agent mcp --agent <codex|claude>`
+(or rerun with `--mcp`) so the user can query their data and create the
+recommended funnels and goals through Databuddy's MCP server. It changes the
+agent's user config, so run it only when the user agrees.
+
 ## Resume and privacy
 
 The checkpoint is `<repository>/.databuddy/setup.json`. Repeat the same

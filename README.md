@@ -62,6 +62,32 @@ excerpts to Databuddy's scan API under its zero-retention terms; `--scan off`
 skips it. Limit any command to part of a monorepo with repeatable `--scope`
 options, and `report` to some areas with `--areas events,tracker`.
 
+## Keep working in your agent
+
+`npx @databuddy/setup-agent mcp --agent claude` (or `--agent codex`) adds
+Databuddy's hosted MCP server to that agent's user config, so the same
+Claude Code or Codex session can query your analytics and create the
+recommended funnels, goals, flags and links. Pass `--mcp` to `setup` or
+`report` to do this when the run finishes. It uses the agent's own
+`mcp add` command and leaves an existing `databuddy` entry unchanged. Sign
+in afterwards with `/mcp` in Claude Code or `codex mcp login databuddy`.
+
+## Check applied edits
+
+The agent never runs your project's tools on its own, because a formatter or
+typecheck executes the project's configuration. Pass the commands you trust
+with `--check`, and they run in the repository after `--apply` writes the
+reviewed edits:
+
+```bash
+npx @databuddy/setup-agent setup . --website website_id \
+  --journey "A shopper adds a product to the cart and starts checkout" \
+  --apply --check "pnpm exec tsc --noEmit" --check "pnpm exec prettier --check ."
+```
+
+Each result, with its exit code and the end of its output, is added to the
+artifact under `checks`, and a failing check makes the command exit 1.
+
 ## Models and privacy
 
 The default backend is Codex at `medium` reasoning effort using your local

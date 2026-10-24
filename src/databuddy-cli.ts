@@ -3,9 +3,11 @@ import { Command, InvalidArgumentError, Option } from "commander";
 import packageJson from "../package.json" with { type: "json" };
 import { type RunSetupTaskParams, runSetupTask } from "./agents/run-task.js";
 import type { AgentProgress } from "./agents/types.js";
+import { runChecks } from "./checks.js";
 import { runDatabuddyDiagnosis } from "./databuddy-diagnosis.js";
 import { renderReportMarkdown, runDatabuddyReport } from "./databuddy-report.js";
 import { runDatabuddySetup } from "./databuddy-setup.js";
+import { installDatabuddyMcp } from "./mcp.js";
 import {
   AGENTS,
   type AgentBackend,
@@ -29,6 +31,7 @@ interface AgentCliOptions {
   modelAuth: ModelAuth;
   timeout: number;
   maxCostUsd?: number;
+  mcp: boolean;
 }
 
 interface SetupCliOptions extends AgentCliOptions {
@@ -36,6 +39,7 @@ interface SetupCliOptions extends AgentCliOptions {
   journey: string;
   products: SetupProduct[];
   apply: boolean;
+  check: string[];
 }
 
 interface DiagnosisCliOptions extends AgentCliOptions {
@@ -115,6 +119,11 @@ function addAgentOptions(command: Command): Command {
         .choices(MODEL_AUTH)
         .default("local"),
     )
+    .option(
+      "--mcp",
+      "Afterwards, add Databuddy's MCP server to your codex or claude config so you can keep working with your analytics",
+      false,
+    )
     .option("--timeout <seconds>", "Deadline in seconds, from 1 to 3600", parseTimeout, 600)
     .option(
       "--max-cost-usd <n>",
@@ -124,6 +133,13 @@ function addAgentOptions(command: Command): Command {
 }
 
 let redact = createSetupRedactor();
+
+async function reportMcpInstall(agent: AgentBackend): Promise<void> {
+  const result = await installDatabuddyMcp(agent);
+  process.stderr.write(
+    `${result.status === "added" ? `Added the Databuddy MCP server to ${agent}.` : ""} ${result.next}\n`.trimStart(),
+  );
+}
 
 async function runAgentCommand(
   name: "setup" | "diagnosis" | "report",
@@ -163,6 +179,7 @@ async function runAgentCommand(
       },
     });
     process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
+    if (options.mcp) await reportMcpInstall(agentType);
   } finally {
     clearTimeout(timer);
     process.removeListener("SIGINT", cancel);
@@ -193,11 +210,19 @@ const setup = program
     "Products to plan: sdk,events,flags,ai-agents,mcp,links,uptime",
     parseProducts,
     ["sdk", "events"],
+  )
+  .option(
+    "--check <command>",
+    "With --apply, run this verification command in the repository afterwards, such as a typecheck or formatter check (repeatable)",
+    collectRepeatable,
+    [],
   );
 
 addAgentOptions(setup).action((repository: string, options: SetupCliOptions) =>
-  runAgentCommand("setup", options, (context) =>
-    runDatabuddySetup({
+  runAgentCommand("setup", options, async (context) => {
+    if (options.check.length && !options.apply)
+      throw new InvalidArgumentError("--check runs after applied edits; add --apply.");
+    const result = await runDatabuddySetup({
       repository,
       apply: options.apply,
       request: {
@@ -206,8 +231,16 @@ addAgentOptions(setup).action((repository: string, options: SetupCliOptions) =>
         products: options.products,
       },
       ...context,
-    }),
-  ),
+    });
+    if (!options.check.length || result.phases.implementation !== "complete") return result;
+    const checks = await runChecks(result.repository, options.check, { signal: context.signal });
+    for (const check of checks)
+      process.stderr.write(
+        `${check.passed ? "Check passed" : `Check failed (exit ${check.exitCode})`}: ${check.command}\n`,
+      );
+    if (checks.some((check) => !check.passed)) process.exitCode = 1;
+    return { ...result, checks };
+  }),
 );
 
 const diagnose = program
@@ -279,6 +312,14 @@ addAgentOptions(report).action((repository: string, options: ReportCliOptions) =
     return result;
   }),
 );
+
+program
+  .command("mcp")
+  .description(
+    "Add Databuddy's hosted MCP server to your codex or claude config so your agent can query analytics and create funnels, goals and flags",
+  )
+  .addOption(new Option("--agent <backend>", "Agent to configure").choices(AGENTS).default("codex"))
+  .action((options: { agent: AgentBackend }) => reportMcpInstall(options.agent));
 
 program.parseAsync().catch((error: unknown) => {
   process.stderr.write(`${redact(error instanceof Error ? error.message : String(error))}\n`);
