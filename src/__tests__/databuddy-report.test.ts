@@ -559,6 +559,54 @@ describe("Databuddy utilization report", () => {
     expect(cached).toEqual(result);
   });
 
+  it("scans only the redacted snapshot, with a minimal environment", async () => {
+    const repository = fixture();
+    // A hardcoded key, assembled at runtime so no key-shaped literal is committed.
+    const key = ["AKIA", "IOSFODNN7", "EXAMPLE"].join("");
+    write(repository, "app/billing.ts", `export const awsKey = "${key}";\n`);
+    write(repository, ".env", "DATABASE_URL=postgres://synthetic\n");
+    const record = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-scan-record-")),
+      "seen.json",
+    );
+    const scanner = path.join(path.dirname(record), "scan.mjs");
+    fs.writeFileSync(
+      scanner,
+      `import fs from "node:fs";
+const target = process.argv[2];
+const files = fs.readdirSync(target, { recursive: true }).map(String);
+fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({
+  target,
+  files,
+  billing: fs.existsSync(target + "/app/billing.ts") ? fs.readFileSync(target + "/app/billing.ts", "utf8") : null,
+  env: Object.keys(process.env),
+}));
+process.stdout.write(${JSON.stringify(scanJson)});
+`,
+    );
+    process.env.GITHUB_TOKEN = "synthetic-github-token";
+    try {
+      await runDatabuddyReport({
+        repository,
+        request: { areas: ["tracker"], scope: [], scan: "on" },
+        scanBin: scanner,
+        runTask: async ({ prompt }) =>
+          JSON.stringify(
+            prompt.startsWith("Independently verify") ? reviewFor(prompt) : investigations.tracker,
+          ),
+      });
+    } finally {
+      delete process.env.GITHUB_TOKEN;
+    }
+    const seen = JSON.parse(fs.readFileSync(record, "utf8"));
+    // The snapshot lives in its own temporary directory, outside the repository.
+    expect(path.relative(fs.realpathSync(repository), seen.target).startsWith("..")).toBe(true);
+    expect(seen.files).toContain(path.join("app", "billing.ts"));
+    expect(seen.files).not.toContain(".env");
+    expect(seen.billing).not.toContain(key);
+    expect(seen.env).not.toContain("GITHUB_TOKEN");
+  });
+
   it("continues without the scan when it is unavailable and records that as an unknown", async () => {
     const repository = fixture();
     const runTask: RunTask = async ({ prompt }) =>

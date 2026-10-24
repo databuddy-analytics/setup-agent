@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -52,19 +52,67 @@ function resolveScanCommand(explicit?: string): { file: string; args: string[] }
   };
 }
 
+/**
+ * Write the redacted snapshot the scanner reads. @databuddy/scan only reads
+ * files Git tracks, so the copy is a fresh repository with everything staged,
+ * built without hooks or the user's global ignore file.
+ */
+export function prepareScanRoot(
+  root: string,
+  contents: Map<string, string>,
+  redact: (value: string) => string,
+): string {
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  for (const [file, source] of contents) {
+    const target = path.join(root, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, redact(source), { mode: 0o600 });
+  }
+  const git = (args: string[]) =>
+    execFileSync("git", ["-c", "core.excludesFile=", "-c", "core.hooksPath=/dev/null", ...args], {
+      cwd: root,
+      stdio: "ignore",
+    });
+  git(["init", "--quiet", "--template="]);
+  git(["add", "--all", "--force", "--", "."]);
+  return root;
+}
+
+// The scanner needs only these; credentials and tokens in the user's shell
+// never reach it. AI_GATEWAY_API_KEY sends the scan to the user's own gateway.
+const SCAN_ENV = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "XDG_CACHE_HOME",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "NO_PROXY",
+  "NODE_EXTRA_CA_CERTS",
+  "AI_GATEWAY_API_KEY",
+];
+
 export function createScanRunner(options: {
-  repository: string;
+  /** The redacted snapshot to scan, never the repository itself. */
+  root: string;
   bin?: string;
   timeoutMs?: number;
 }): ScanRunner {
   const command = resolveScanCommand(options.bin);
+  const env: Record<string, string> = { CI: "1" };
+  for (const name of SCAN_ENV) {
+    const value = process.env[name];
+    if (value) env[name] = value;
+  }
   return async (scope: string) => {
-    const target = scope ? path.join(options.repository, scope) : options.repository;
+    const target = scope ? path.join(options.root, scope) : options.root;
     const { stdout } = await execFileAsync(command.file, [...command.args, target, "--json"], {
-      cwd: options.repository,
+      cwd: options.root,
       timeout: options.timeoutMs ?? 180_000,
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, CI: "1" },
+      env,
     });
     return stdout;
   };

@@ -62,14 +62,18 @@ the code and whether it is already tracked, which usually surfaces more
 tracking gaps. It is off unless you turn it on, because it sends code to
 Databuddy:
 
+- It reads the same filtered, redacted snapshot the model receives, never your
+  repository, so excluded files (including every `.env`) and redacted secrets
+  never reach it, and it gets only a minimal environment.
 - Only the user actions it finds and the functions they call are sent, not
   whole files. Swift files and files it cannot parse are sent whole.
 - Databuddy's scan API classifies them with the Jev model on Vercel AI Gateway
   with zero data retention. Your code is never stored or logged. Databuddy
   records only request metadata (size, counts, timing and a random run ID), and
   uses your IP only as a hashed rate-limit key.
-- Set `AI_GATEWAY_API_KEY` to send the code to your own Vercel AI Gateway
-  account instead, and Databuddy receives nothing.
+- Set `AI_GATEWAY_API_KEY` in your shell to send the code to your own Vercel AI
+  Gateway account instead, and Databuddy receives nothing. A key in the
+  repository's `.env` is not used, because the scanner never sees that file.
 - `npx @databuddy/scan@0.1.3 --dry-run` lists every line that would be sent
   without sending anything. Results are cached in `~/.cache/databuddy/scan`.
 - The scanner is an exact dependency of this package (or `--scan-bin`), so

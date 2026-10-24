@@ -39,6 +39,7 @@ import {
 } from "./repository-snapshot.js";
 import {
   createScanRunner,
+  prepareScanRoot,
   runScanPrepass,
   SCAN_SNAPSHOT_FILE,
   type ScanPrepass,
@@ -482,27 +483,35 @@ export async function runDatabuddyReport(options: ReportOptions): Promise<Databu
       atomicWriteFileSync(stateFile, `${JSON.stringify(checkpoint, null, 2)}\n`, { mode: 0o600 });
     save();
 
-    options.onProgress?.({
-      type: "started",
-      message: "Scanning user actions with @databuddy/scan",
-    });
+    const snapshot = path.join(temporary, "source");
+    writeSnapshot(snapshot, contents, redact);
+    if (request.scan === "on")
+      options.onProgress?.({
+        type: "started",
+        message: "Scanning user actions with @databuddy/scan",
+      });
+    // The scanner reads the same filtered, redacted snapshot the model gets,
+    // never the repository, so excluded files and secrets cannot reach it.
     const scan: ScanPrepass = await timed("scan", () =>
       runScanPrepass({
         scopes: request.scope,
         mode: request.scan,
-        runner: options.scanRunner ?? createScanRunner({ repository, bin: options.scanBin }),
+        runner:
+          options.scanRunner ??
+          createScanRunner({
+            root: prepareScanRoot(path.join(path.dirname(snapshot), "scan"), contents, redact),
+            bin: options.scanBin,
+          }),
       }),
     );
-    options.onProgress?.({
-      type: "complete",
-      message:
-        scan.summary.status === "complete"
-          ? `Scan found ${scan.summary.actions} user actions`
-          : `Scan ${scan.summary.status}${scan.summary.detail ? `: ${scan.summary.detail.slice(0, 200)}` : ""}`,
-    });
-
-    const snapshot = path.join(temporary, "source");
-    writeSnapshot(snapshot, contents, redact);
+    if (request.scan === "on")
+      options.onProgress?.({
+        type: "complete",
+        message:
+          scan.summary.status === "complete"
+            ? `Scan found ${scan.summary.actions} user actions`
+            : `Scan ${scan.summary.status}${scan.summary.detail ? `: ${scan.summary.detail.slice(0, 200)}` : ""}`,
+      });
     if (scan.snapshotJson) {
       const target = path.join(snapshot, SCAN_SNAPSHOT_FILE);
       fs.mkdirSync(path.dirname(target), { recursive: true });
