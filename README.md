@@ -88,6 +88,27 @@ npx @databuddy/setup-agent setup . --website website_id \
 Each result, with its exit code and the end of its output, is added to the
 artifact under `checks`, and a failing check makes the command exit 1.
 
+## Telemetry and feedback
+
+When you pass `--website`, `setup` and `report` send one short report to
+Databuddy after each run, so we can see which stacks the agent handles and
+where it fails. It contains the outcome, the steps that completed, typed
+issue codes such as `review_rejected` or `sdk_install_failed`, the first line
+of any error with file paths and credentials removed, the framework and
+package manager, which of a fixed list of well-known packages you use (for
+example `next`, `better-auth` or `stripe`; other dependency names are never
+sent), the agent backend and model, and finding and check counts. It never
+contains source code, file paths, repository names or prompts. Turn it off
+with `--no-telemetry`, `DATABUDDY_TELEMETRY=0` or `DO_NOT_TRACK=1`, or set
+`DATABUDDY_TELEMETRY=print` to see the exact payload without sending it.
+
+Send a bug report, feature request or other feedback with:
+
+```bash
+npx @databuddy/setup-agent feedback "Apply stopped after the SDK install" \
+  --website website_id --category bug_report
+```
+
 ## Models and privacy
 
 The default backend is Codex at `medium` reasoning effort using your local

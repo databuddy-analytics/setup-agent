@@ -57,6 +57,15 @@ After a successful run, offer `npx @databuddy/setup-agent mcp --agent <codex|cla
 recommended funnels and goals through Databuddy's MCP server. It changes the
 agent's user config, so run it only when the user agrees.
 
+## Report problems
+
+When the user hits a bug or has feedback about the setup agent, offer to
+send it with `npx @databuddy/setup-agent feedback "<their words>" --website
+<id> --category bug_report|feature_request|other`. Send only what the user
+agrees to; never include credentials or customer data. Runs with `--website`
+also send an anonymous outcome report unless the user passes
+`--no-telemetry`.
+
 ## Resume and privacy
 
 The checkpoint is `<repository>/.databuddy/setup.json`. Repeat the same

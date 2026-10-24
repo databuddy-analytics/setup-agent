@@ -20,6 +20,7 @@ import {
 } from "./model.js";
 import { setupErrorExitCode } from "./protocol.js";
 import type { DatabuddyReportArea } from "./schema.js";
+import { feedbackPayload, runPayload, sendTelemetry, telemetryMode } from "./telemetry.js";
 import { createSetupRedactor, normalizeTerminalLine } from "./terminal.js";
 
 type SetupProduct = Parameters<typeof runDatabuddySetup>[0]["request"]["products"][number];
@@ -32,6 +33,7 @@ interface AgentCliOptions {
   timeout: number;
   maxCostUsd?: number;
   mcp: boolean;
+  telemetry: boolean;
 }
 
 interface SetupCliOptions extends AgentCliOptions {
@@ -129,6 +131,39 @@ function addAgentOptions(command: Command): Command {
       "--max-cost-usd <n>",
       "Stop before further tasks when estimated invocation cost reaches this amount",
       parseCost,
+    )
+    .option(
+      "--no-telemetry",
+      "Do not send the run report (outcome, framework, well-known packages; never code or paths) to Databuddy",
+    );
+}
+
+interface TelemetryTarget {
+  command: "setup" | "report";
+  websiteId?: string;
+  repository: string;
+}
+
+async function reportRun(
+  target: TelemetryTarget | undefined,
+  options: AgentCliOptions,
+  model: string,
+  started: number,
+  outcome: { artifact?: Record<string, unknown>; error?: unknown },
+): Promise<void> {
+  if (!target?.websiteId) return;
+  const mode = telemetryMode(process.env, !options.telemetry);
+  const payload = runPayload({
+    ...target,
+    websiteId: target.websiteId,
+    agent: options.agent,
+    model,
+    durationMs: Date.now() - started,
+    ...outcome,
+  });
+  if ((await sendTelemetry(payload, { mode })) === "sent")
+    process.stderr.write(
+      "Sent this run's outcome, framework and well-known packages to Databuddy to improve the setup agent (no code or paths). Turn off with --no-telemetry or DATABUDDY_TELEMETRY=0.\n",
     );
 }
 
@@ -145,7 +180,9 @@ async function runAgentCommand(
   name: "setup" | "diagnosis" | "report",
   options: AgentCliOptions,
   run: (context: AgentCommandContext) => Promise<unknown>,
+  telemetry?: TelemetryTarget,
 ): Promise<void> {
+  const started = Date.now();
   const agentType = options.agent;
   const config = agentConfig({
     agent: agentType,
@@ -179,7 +216,13 @@ async function runAgentCommand(
       },
     });
     process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
+    await reportRun(telemetry, options, String(config.model), started, {
+      artifact: artifact as Record<string, unknown>,
+    });
     if (options.mcp) await reportMcpInstall(agentType);
+  } catch (error) {
+    await reportRun(telemetry, options, String(config.model), started, { error });
+    throw error;
   } finally {
     clearTimeout(timer);
     process.removeListener("SIGINT", cancel);
@@ -219,28 +262,33 @@ const setup = program
   );
 
 addAgentOptions(setup).action((repository: string, options: SetupCliOptions) =>
-  runAgentCommand("setup", options, async (context) => {
-    if (options.check.length && !options.apply)
-      throw new InvalidArgumentError("--check runs after applied edits; add --apply.");
-    const result = await runDatabuddySetup({
-      repository,
-      apply: options.apply,
-      request: {
-        websiteId: options.website,
-        journey: options.journey,
-        products: options.products,
-      },
-      ...context,
-    });
-    if (!options.check.length || result.phases.implementation !== "complete") return result;
-    const checks = await runChecks(result.repository, options.check, { signal: context.signal });
-    for (const check of checks)
-      process.stderr.write(
-        `${check.passed ? "Check passed" : `Check failed (exit ${check.exitCode})`}: ${check.command}\n`,
-      );
-    if (checks.some((check) => !check.passed)) process.exitCode = 1;
-    return { ...result, checks };
-  }),
+  runAgentCommand(
+    "setup",
+    options,
+    async (context) => {
+      if (options.check.length && !options.apply)
+        throw new InvalidArgumentError("--check runs after applied edits; add --apply.");
+      const result = await runDatabuddySetup({
+        repository,
+        apply: options.apply,
+        request: {
+          websiteId: options.website,
+          journey: options.journey,
+          products: options.products,
+        },
+        ...context,
+      });
+      if (!options.check.length || result.phases.implementation !== "complete") return result;
+      const checks = await runChecks(result.repository, options.check, { signal: context.signal });
+      for (const check of checks)
+        process.stderr.write(
+          `${check.passed ? "Check passed" : `Check failed (exit ${check.exitCode})`}: ${check.command}\n`,
+        );
+      if (checks.some((check) => !check.passed)) process.exitCode = 1;
+      return { ...result, checks };
+    },
+    { command: "setup", websiteId: options.website, repository },
+  ),
 );
 
 const diagnose = program
@@ -289,28 +337,33 @@ const report = program
   .option("--markdown <file>", "Also write the report as markdown to this file");
 
 addAgentOptions(report).action((repository: string, options: ReportCliOptions) =>
-  runAgentCommand("report", options, async (context) => {
-    const areas = options.areas
-      ? (options.areas.split(",").map((area) => area.trim()) as DatabuddyReportArea[])
-      : undefined;
-    const result = await runDatabuddyReport({
-      repository,
-      request: {
-        websiteId: options.website,
-        journey: options.journey,
-        scope: options.scope,
-        ...(areas ? { areas } : {}),
-        scan: options.scan,
-      },
-      scanBin: options.scanBin,
-      ...context,
-    });
-    if (options.markdown) {
-      fs.writeFileSync(options.markdown, renderReportMarkdown(result), { mode: 0o600 });
-      process.stderr.write(`Markdown report written to ${options.markdown}\n`);
-    }
-    return result;
-  }),
+  runAgentCommand(
+    "report",
+    options,
+    async (context) => {
+      const areas = options.areas
+        ? (options.areas.split(",").map((area) => area.trim()) as DatabuddyReportArea[])
+        : undefined;
+      const result = await runDatabuddyReport({
+        repository,
+        request: {
+          websiteId: options.website,
+          journey: options.journey,
+          scope: options.scope,
+          ...(areas ? { areas } : {}),
+          scan: options.scan,
+        },
+        scanBin: options.scanBin,
+        ...context,
+      });
+      if (options.markdown) {
+        fs.writeFileSync(options.markdown, renderReportMarkdown(result), { mode: 0o600 });
+        process.stderr.write(`Markdown report written to ${options.markdown}\n`);
+      }
+      return result;
+    },
+    { command: "report", websiteId: options.website, repository },
+  ),
 );
 
 program
@@ -320,6 +373,29 @@ program
   )
   .addOption(new Option("--agent <backend>", "Agent to configure").choices(AGENTS).default("codex"))
   .action((options: { agent: AgentBackend }) => reportMcpInstall(options.agent));
+
+program
+  .command("feedback <message>")
+  .description(
+    "Send a bug report, feature request or other feedback about the setup agent to the Databuddy team",
+  )
+  .requiredOption("--website <id>", "Databuddy website ID the feedback is about")
+  .addOption(
+    new Option("--category <category>", "Kind of feedback")
+      .choices(["bug_report", "feature_request", "other"])
+      .default("other"),
+  )
+  .action(async (message: string, options: { website: string; category: string }) => {
+    const result = await sendTelemetry(
+      feedbackPayload({ websiteId: options.website, category: options.category, message }),
+      // Feedback is an explicit request to send, so only print mode changes it.
+      { mode: process.env.DATABUDDY_TELEMETRY?.toLowerCase() === "print" ? "print" : "send" },
+    );
+    if (result === "failed")
+      throw new Error("Feedback could not be sent; check the website ID and try again.");
+    if (result === "sent")
+      process.stderr.write("Thanks, your feedback was sent to the Databuddy team.\n");
+  });
 
 program.parseAsync().catch((error: unknown) => {
   process.stderr.write(`${redact(error instanceof Error ? error.message : String(error))}\n`);
