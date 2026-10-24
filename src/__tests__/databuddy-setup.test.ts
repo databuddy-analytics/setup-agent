@@ -691,6 +691,42 @@ describe("Databuddy setup implementation", () => {
       expect(fs.readFileSync(path.join(repository, change.path), "utf8")).toBe(change.content);
   });
 
+  it("accepts a planned event deferred with a reason and reports it", async () => {
+    const repository = fixture();
+    const base = plan();
+    const withProject: DatabuddySetupPlan = {
+      ...base,
+      events: [...base.events, { ...base.events[0], name: "project_created" }],
+    };
+    let reviewPrompt = "";
+    const runTask: RunTask = async ({ prompt }) => {
+      if (prompt.startsWith("Generate the smallest"))
+        return JSON.stringify({
+          ...implementation(),
+          deferred: [
+            { event: "project_created", reason: "No route creates a project yet." },
+            { event: "not_planned", reason: "Ignored because it was never planned." },
+          ],
+        });
+      if (prompt.startsWith("Independently verify")) {
+        reviewPrompt = prompt;
+        return JSON.stringify(sourceReview());
+      }
+      return JSON.stringify(withProject);
+    };
+    const result = await runDatabuddySetup({
+      repository,
+      request,
+      apply: true,
+      runTask,
+      installSdk: async (target: string) => installFixtureSdk(target),
+    });
+    expect(reviewPrompt).toContain("No route creates a project yet.");
+    expect(result.implementation?.deferred).toEqual([
+      { event: "project_created", reason: "No route creates a project yet." },
+    ]);
+  });
+
   it("refuses to apply anything but the exact reviewed patch", async () => {
     for (const change of ["source", "patch"] as const) {
       const repository = fixture();

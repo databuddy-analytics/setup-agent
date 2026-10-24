@@ -151,8 +151,19 @@ export const DatabuddySetupPlanSchema = z
   })
   .strict();
 
+// A planned event the implementer could not send safely, with its reason; the
+// reviewer judges the reason and the result reports it.
+const deferredEventSchema = z
+  .object({
+    event: z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+const deferredEventsSchema = z.array(deferredEventSchema).max(20);
+
 export const DatabuddySetupChangesSchema = z
   .object({
+    deferred: deferredEventsSchema.optional(),
     changes: z
       .array(
         z
@@ -232,6 +243,7 @@ export const DatabuddySetupResultSchema = z
         sdkVersion: z.string().min(1).max(100),
         sourceReview: DatabuddySetupSourceReviewSchema,
         diff: z.literal(".databuddy/setup.patch"),
+        deferred: deferredEventsSchema.optional(),
       })
       .strict()
       .optional(),
@@ -241,6 +253,7 @@ export const DatabuddySetupResultSchema = z
         diff: z.literal(".databuddy/setup.patch"),
         files: z.number().int().min(0).max(40),
         sourceReview: DatabuddySetupSourceReviewSchema,
+        deferred: deferredEventsSchema.optional(),
       })
       .strict()
       .optional(),
@@ -279,6 +292,7 @@ const journalSchema = z
       .max(40),
     sourceReview: DatabuddySetupSourceReviewSchema,
     diffHash: hashSchema,
+    deferred: deferredEventsSchema.optional(),
   })
   .strict();
 
