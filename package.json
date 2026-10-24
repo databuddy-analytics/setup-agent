@@ -1,6 +1,6 @@
 {
   "name": "@databuddy/setup-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Plan, apply, and verify Databuddy instrumentation in a web application",
   "license": "Apache-2.0",
   "author": "Databuddy <support@databuddy.cc>",
