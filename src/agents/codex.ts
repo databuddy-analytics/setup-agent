@@ -144,10 +144,13 @@ function findCodexSubscriptionAuth(): string | null {
 function mirrorCodexAuthJson(userCodexHome: string, codexHome: string): void {
   const src = path.join(userCodexHome, "auth.json");
   const dst = path.join(codexHome, "auth.json");
+  // A link, never a copy: a copy of the login would outlive a killed run.
   try {
     fs.symlinkSync(src, dst);
-  } catch {
-    fs.copyFileSync(src, dst);
+  } catch (error) {
+    throw new Error(
+      `Could not link the Codex login into the private Codex home (${(error as Error).message}). Set OPENAI_API_KEY or use --agent claude.`,
+    );
   }
 }
 
