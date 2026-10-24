@@ -26,6 +26,15 @@ Both backends drive the CLI already installed on your `PATH` rather than
 shipping their own platform binaries. Set `CODEX_EXECUTABLE` or
 `CLAUDE_CODE_EXECUTABLE` to use a specific binary.
 
+Both backends can read only the redacted snapshot, which lives in
+`~/.cache/databuddy-setup-agent` (or `$XDG_CACHE_HOME`) while a task runs.
+Codex enforces this with Seatbelt on macOS and bubblewrap on Linux. On Linux
+it needs `bwrap` installed and unprivileged user namespaces allowed; Docker's
+default profile blocks those, so in a stock container Codex refuses every
+command rather than running unconfined. There, use `--agent claude`, whose
+file access is checked inside the agent, or run the container with
+`--security-opt seccomp=unconfined`.
+
 Accepted reasoning levels are `minimal`, `low`, `medium`, `high`, and
 `xhigh`. Each backend maps them to its own reasoning control.
 
