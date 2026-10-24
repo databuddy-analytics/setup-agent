@@ -26,7 +26,7 @@
   },
   "packageManager": "pnpm@8.15.9",
   "bin": {
-    "databuddy": "./dist/databuddy-cli.mjs"
+    "databuddy": "dist/databuddy-cli.mjs"
   },
   "files": [
     "dist",
