@@ -122,6 +122,9 @@ describe("terminal output", () => {
     for (const secret of ["composepw1", awsSecret, "Hunter2Hunter2", "pa/ss", "word@", hexKey])
       expect(redactedThird).not.toContain(secret);
     expect(redactedThird).toContain("@db.internal:5432/app");
+    // Hex of no digest length, on an innocently named constant.
+    const randomHex = fake("9c4e1f0a7b3d", "2e8f6a1c5b9d0e7f4a3c2b1d6e8f0a9b");
+    expect(redact(`const value = "${randomHex}";`)).not.toContain(randomHex);
     const ordinary = [
       'const digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";',
       "const profile = 'http://localhost:3000/@user';",

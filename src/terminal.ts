@@ -105,12 +105,23 @@ function entropy(value: string): number {
   return bits;
 }
 
+// Quoted hex of a length no common digest has (MD5, SHA-1, SHA-256, SHA-384,
+// SHA-512), such as `openssl rand -hex 24`, is a secret rather than a hash.
+const HEX_LITERAL = /(["'`])([A-Fa-f0-9]{32,})\1/g;
+const DIGEST_LENGTHS = new Set([32, 40, 64, 96, 128]);
+
 function redactHighEntropy(input: string): string {
-  return input.replace(HIGH_ENTROPY_LITERAL, (match, quote: string, value: string) =>
-    /\d/.test(value) && /[A-Za-z]/.test(value) && !value.startsWith("/") && entropy(value) >= 4.3
-      ? `${quote}[REDACTED]${quote}`
-      : match,
-  );
+  return input
+    .replace(HEX_LITERAL, (match, quote: string, value: string) =>
+      DIGEST_LENGTHS.has(value.length) || !/\d/.test(value) || !/[a-f]/i.test(value)
+        ? match
+        : `${quote}[REDACTED]${quote}`,
+    )
+    .replace(HIGH_ENTROPY_LITERAL, (match, quote: string, value: string) =>
+      /\d/.test(value) && /[A-Za-z]/.test(value) && !value.startsWith("/") && entropy(value) >= 4.3
+        ? `${quote}[REDACTED]${quote}`
+        : match,
+    );
 }
 
 /** Redact credential-named environment values, provider key formats and secret assignments. */
