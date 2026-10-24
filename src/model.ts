@@ -29,7 +29,6 @@ const AMBIENT_API_ROUTES = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
-  "AI_GATEWAY_API_KEY",
 ];
 
 interface AgentSelection {

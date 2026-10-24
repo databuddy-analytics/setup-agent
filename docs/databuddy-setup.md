@@ -77,9 +77,10 @@ existing data is wrong or sensitive, and `enrichment` otherwise.
 
 ## Full utilization report
 
-`databuddy report` is the whole-product command. It runs the `@databuddy/scan`
-action map as a pre-pass (coverage and a suggested event name per user
-action), writes the full rows into the snapshot under `.databuddy-scan/`, and
+`databuddy report` is the whole-product command. With `--scan on` it first
+runs the optional `@databuddy/scan` action map (coverage and a suggested event
+name per user action; see the README for what it sends and the zero data
+retention terms), writes the full rows into the snapshot under `.databuddy-scan/`, and
 runs the `events`, `tracker`, `server` and `growth` areas as parallel
 read-only investigations, each with the reference topics it needs. Each area
 is verified independently, also in parallel, and the merged result carries

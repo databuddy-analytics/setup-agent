@@ -129,7 +129,7 @@ export const SCAN_SNAPSHOT_FILE = ".databuddy-scan/actions.json";
 export async function runScanPrepass(options: {
   scopes: string[];
   runner: ScanRunner;
-  mode: "auto" | "off";
+  mode: "on" | "off";
 }): Promise<ScanPrepass> {
   if (options.mode === "off")
     return { summary: { status: "off" }, rows: [], actionMap: "", snapshotJson: "" };

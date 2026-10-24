@@ -69,7 +69,7 @@ interface ReportOptions {
     journey?: string;
     scope?: string[];
     areas?: DatabuddyReportArea[];
-    scan?: "auto" | "off";
+    scan?: "on" | "off";
   };
   agentType?: AgentBackend;
   config?: Record<string, unknown>;

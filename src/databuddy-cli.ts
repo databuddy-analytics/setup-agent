@@ -55,7 +55,7 @@ interface ReportCliOptions extends AgentCliOptions {
   journey?: string;
   scope: string[];
   areas?: string;
-  scan: "auto" | "off";
+  scan: "on" | "off" | "auto";
   scanBin?: string;
   markdown?: string;
 }
@@ -133,6 +133,9 @@ function addAgentOptions(command: Command): Command {
       "Do not send the run report (outcome, framework, well-known packages; never code or paths) to Databuddy",
     );
 }
+
+const SCAN_NOTICE = `The optional action scan is off. With --scan on, @databuddy/scan first maps every user action in the code, which usually finds more tracking gaps. Only the actions it finds and the functions they call are sent, not whole files (Swift and files it cannot parse are sent whole), to Databuddy's scan API, which classifies them with the Jev model on Vercel AI Gateway under zero data retention. Your code is never stored or logged; Databuddy records only request size, counts and timing. Set AI_GATEWAY_API_KEY to send it to your own Vercel AI Gateway account instead, and Databuddy receives nothing. Preview every line with npx @databuddy/scan@0.1.3 --dry-run. Details: https://www.databuddy.cc/docs/privacy/event-scanner
+`;
 
 interface TelemetryTarget {
   command: "setup" | "report";
@@ -329,41 +332,47 @@ const report = program
   )
   .option("--areas <csv>", "Areas to run: events,tracker,server,growth (default: all)")
   .addOption(
-    new Option("--scan <mode>", "Run @databuddy/scan as a pre-pass")
-      .choices(["auto", "off"])
-      .default("auto"),
+    new Option(
+      "--scan <mode>",
+      "Optional action scan first: on sends action code excerpts (not whole files) to Databuddy's zero-data-retention scan API, or to your own AI Gateway when AI_GATEWAY_API_KEY is set",
+    )
+      .choices(["on", "off", "auto"])
+      .default("off"),
   )
   .option("--scan-bin <path>", "Path to a databuddy-scan binary or bundled cli.js")
   .option("--markdown <file>", "Also write the report as markdown to this file");
 
-addAgentOptions(report).action((repository: string, options: ReportCliOptions) =>
-  runAgentCommand(
-    "report",
-    options,
-    async (context) => {
-      const areas = options.areas
-        ? (options.areas.split(",").map((area) => area.trim()) as DatabuddyReportArea[])
-        : undefined;
-      const result = await runDatabuddyReport({
-        repository,
-        request: {
-          websiteId: options.website,
-          journey: options.journey,
-          scope: options.scope,
-          ...(areas ? { areas } : {}),
-          scan: options.scan,
-        },
-        scanBin: options.scanBin,
-        ...context,
-      });
-      if (options.markdown) {
-        fs.writeFileSync(options.markdown, renderReportMarkdown(result), { mode: 0o600 });
-        process.stderr.write(`Markdown report written to ${options.markdown}\n`);
-      }
-      return result;
-    },
-    { command: "report", websiteId: options.website, repository },
-  ),
+addAgentOptions(report).action(
+  (repository: string, options: ReportCliOptions, command: Command) => {
+    if (command.getOptionValueSource("scan") === "default") process.stderr.write(SCAN_NOTICE);
+    return runAgentCommand(
+      "report",
+      options,
+      async (context) => {
+        const areas = options.areas
+          ? (options.areas.split(",").map((area) => area.trim()) as DatabuddyReportArea[])
+          : undefined;
+        const result = await runDatabuddyReport({
+          repository,
+          request: {
+            websiteId: options.website,
+            journey: options.journey,
+            scope: options.scope,
+            ...(areas ? { areas } : {}),
+            scan: options.scan === "auto" ? "on" : options.scan,
+          },
+          scanBin: options.scanBin,
+          ...context,
+        });
+        if (options.markdown) {
+          fs.writeFileSync(options.markdown, renderReportMarkdown(result), { mode: 0o600 });
+          process.stderr.write(`Markdown report written to ${options.markdown}\n`);
+        }
+        return result;
+      },
+      { command: "report", websiteId: options.website, repository },
+    );
+  },
 );
 
 program

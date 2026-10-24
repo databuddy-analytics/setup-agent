@@ -188,7 +188,7 @@ describe("scan prepass", () => {
     expect(map.indexOf("Missing or partial")).toBeLessThan(map.indexOf("Already tracked"));
     const prepass = await runScanPrepass({
       scopes: [],
-      mode: "auto",
+      mode: "on",
       runner: async () => scanJson,
     });
     expect(prepass.summary).toMatchObject({
@@ -198,7 +198,7 @@ describe("scan prepass", () => {
     });
     const failed = await runScanPrepass({
       scopes: ["app"],
-      mode: "auto",
+      mode: "on",
       runner: async () => {
         throw new Error("npx offline");
       },
@@ -488,8 +488,12 @@ describe("Databuddy utilization report", () => {
       repository,
       request: { areas: ["events", "tracker"], scope: [] },
       runTask,
-      scanRunner: async () => scanJson,
+      // The scan sends code excerpts off the machine, so it never runs unless asked.
+      scanRunner: async () => {
+        throw new Error("The action scan ran without --scan on");
+      },
     });
+    expect(result.scan.status).toBe("off");
     expect(Object.keys(result.areas)).toEqual(["tracker"]);
     expect(result.findings.map((item) => item.id)).toEqual(["tracker_1"]);
     expect(
@@ -517,7 +521,7 @@ describe("Databuddy utilization report", () => {
     };
     const result = await runDatabuddyReport({
       repository,
-      request: { journey: "Sign up and pay", areas: ["events", "tracker"], scope: [] },
+      request: { journey: "Sign up and pay", areas: ["events", "tracker"], scope: [], scan: "on" },
       runTask,
       scanRunner: async () => scanJson,
     });
@@ -547,7 +551,7 @@ describe("Databuddy utilization report", () => {
     const calls = phases.length;
     const cached = await runDatabuddyReport({
       repository,
-      request: { journey: "Sign up and pay", areas: ["events", "tracker"], scope: [] },
+      request: { journey: "Sign up and pay", areas: ["events", "tracker"], scope: [], scan: "on" },
       runTask,
       scanRunner: async () => scanJson,
     });
@@ -563,7 +567,7 @@ describe("Databuddy utilization report", () => {
       );
     const result = await runDatabuddyReport({
       repository,
-      request: { areas: ["tracker"], scope: [] },
+      request: { areas: ["tracker"], scope: [], scan: "on" },
       runTask,
       scanRunner: async () => {
         throw new Error("scan missing");

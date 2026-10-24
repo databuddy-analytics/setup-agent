@@ -5,7 +5,7 @@ description: Inspect a web application, plan Databuddy instrumentation, and appl
 
 # Databuddy setup planning
 
-Use `databuddy report` for a full utilization report (scan, parallel area investigations, verified recommendations). Use this workflow to plan Databuddy setup in a web application; the framework is detected from its manifests, and `--apply` currently implements Next.js only. With
+Use `databuddy report` for a full utilization report (parallel area investigations and verified recommendations, with an optional action scan). Use this workflow to plan Databuddy setup in a web application; the framework is detected from its manifests, and `--apply` currently implements Next.js only. With
 `--apply`, the command installs the SDK and writes independently reviewed
 SDK/custom-event changes at the application root. Pull requests, website
 permission checks, and live event verification remain pending.
@@ -49,6 +49,24 @@ Report phase status and unresolved work. Use `--apply` when the user has
 requested implementation of SDK/custom events. Flags, AI-agent analytics,
 and MCP remain planning-only. Applied source changes do not prove website
 access, an app build, or live delivery. Review event properties for sensitive data.
+
+## Ask before the action scan
+
+`report --scan on` adds an action map that usually finds more tracking gaps,
+but it sends code to Databuddy, so it is off by default. Before running
+`report`, ask the user whether to turn it on, and explain it plainly:
+
+- Only the user actions the scanner finds and the functions they call are
+  sent, not whole files (Swift and files it cannot parse are sent whole).
+- Databuddy's scan API classifies them with the Jev model on Vercel AI Gateway
+  under zero data retention. The code is never stored or logged; Databuddy
+  records only request size, counts, timing and a random run ID.
+- With their own `AI_GATEWAY_API_KEY` set, the code goes to their own Vercel
+  AI Gateway account and Databuddy receives nothing.
+- `npx @databuddy/scan@0.1.3 --dry-run` shows every line that would be sent.
+
+Add `--scan on` only if the user agrees; otherwise run `report` without it.
+Details: https://www.databuddy.cc/docs/privacy/event-scanner
 
 ## Hand off to the user's agent
 

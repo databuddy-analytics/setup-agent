@@ -8,12 +8,11 @@ source before it reaches you.
 
 It has three commands:
 
-- `databuddy report` maps every user action with `@databuddy/scan`, then
-  investigates custom events, the browser tracker, server events, and the
+- `databuddy report` investigates custom events, the browser tracker, server events, and the
   growth products (flags, links, uptime, AI crawler and MCP analytics) in
   parallel. The result lists what works, what is broken, and each addition
   as a structured recommendation anchored on the source line that justifies
-  it.
+  it. An optional action scan can map every user action first.
 - `databuddy setup` plans SDK placement and custom events around one user
   journey. With `--apply` in a Next.js app it installs the SDK and writes
   edits that a separate reviewer has approved.
@@ -56,11 +55,29 @@ result without a model call; an interrupted run resumes the work it has
 not finished. Private task records, including redacted prompts and usage,
 stay in `.databuddy/runs/`. Add `.databuddy/` to the target's `.gitignore`.
 
-`report` runs `@databuddy/scan` first, from the exact version pinned as a
-dependency of this package (or `--scan-bin` when given); nothing is downloaded
-at run time. The scan sends code excerpts to Databuddy's scan API under its
-zero-retention terms; `--scan off` skips it, and `setup` and `diagnose` never
-run it. Limit any command to part of a monorepo with repeatable `--scope`
+### The optional action scan
+
+`report --scan on` first runs `@databuddy/scan` to map every user action in
+the code and whether it is already tracked, which usually surfaces more
+tracking gaps. It is off unless you turn it on, because it sends code to
+Databuddy:
+
+- Only the user actions it finds and the functions they call are sent, not
+  whole files. Swift files and files it cannot parse are sent whole.
+- Databuddy's scan API classifies them with the Jev model on Vercel AI Gateway
+  with zero data retention. Your code is never stored or logged. Databuddy
+  records only request metadata (size, counts, timing and a random run ID), and
+  uses your IP only as a hashed rate-limit key.
+- Set `AI_GATEWAY_API_KEY` to send the code to your own Vercel AI Gateway
+  account instead, and Databuddy receives nothing.
+- `npx @databuddy/scan@0.1.3 --dry-run` lists every line that would be sent
+  without sending anything. Results are cached in `~/.cache/databuddy/scan`.
+- The scanner is an exact dependency of this package (or `--scan-bin`), so
+  nothing is downloaded at run time. `setup` and `diagnose` never run it.
+
+[How the scanner handles your code](https://www.databuddy.cc/docs/privacy/event-scanner).
+
+Limit any command to part of a monorepo with repeatable `--scope`
 options, and `report` to some areas with `--areas events,tracker`.
 
 ## Keep working in your agent
