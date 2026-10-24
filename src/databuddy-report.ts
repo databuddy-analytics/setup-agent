@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { runSetupTask } from "./agents/run-task.js";
 import type { AgentProgress } from "./agents/types.js";
@@ -63,6 +62,7 @@ import {
 } from "./schema.js";
 import { createRepositoryTaskRunner } from "./task-execution.js";
 import { createSetupRedactor } from "./terminal.js";
+import { makeWorkDir } from "./workdir.js";
 
 interface ReportOptions {
   repository: string;
@@ -429,7 +429,7 @@ export async function runDatabuddyReport(options: ReportOptions): Promise<Databu
     const state = fs.lstatSync(stateFile, { throwIfNoEntry: false });
     if (state && (state.isSymbolicLink() || !state.isFile()))
       throw new Error("Report checkpoint must be a regular file inside the repository");
-    temporary = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-report-"));
+    temporary = makeWorkDir("databuddy-report-");
     const gitDir = path.join(temporary, "index");
     execFileSync("git", ["init", "--bare", "--quiet", "--template=", gitDir], { stdio: "pipe" });
     const readCurrent = () =>

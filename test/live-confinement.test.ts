@@ -5,15 +5,17 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { snapshotPermissionProfile } from "../src/agents/codex.js";
 import { findAgentExecutable } from "../src/model.js";
+import { makeWorkDir } from "../src/workdir.js";
 
 // Opt in through test:live; this runs the installed codex sandbox, without model calls.
 describe.skipIf(process.env.LIVE_AGENT !== "1")("Codex snapshot confinement", () => {
   it("lets sandboxed commands read the workspace and nothing else", () => {
     const codex = findAgentExecutable("codex");
     if (!codex) throw new Error("codex is not on PATH");
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-codex-home-"));
+    // The same private layout the agent uses: homes and workspaces in the work root.
+    const home = makeWorkDir("codex-home-");
     fs.writeFileSync(path.join(home, "config.toml"), snapshotPermissionProfile(codex));
-    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-workspace-"));
+    const workspace = makeWorkDir("databuddy-workspace-");
     fs.writeFileSync(path.join(workspace, "inside.txt"), "inside");
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-outside-"));
     fs.writeFileSync(path.join(outside, "canary.txt"), "canary");

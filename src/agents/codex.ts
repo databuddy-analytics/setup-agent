@@ -11,6 +11,7 @@ import {
   type ThreadItem,
 } from "@openai/codex-sdk";
 import { findAgentExecutable } from "../model.js";
+import { makeWorkDir, workRoot } from "../workdir.js";
 import { classifyQuotaError, QuotaExhaustedError } from "./shared.js";
 import type { AgentProgress, BatchMeta, SetupTaskParams } from "./types.js";
 
@@ -46,8 +47,8 @@ export function snapshotPermissionProfile(codexExecutable?: string): string {
     "[permissions.databuddy-snapshot.filesystem]",
     '":root" = "deny"',
     '":minimal" = "read"',
-    // The minimal set leaves /tmp readable, and the snapshot's siblings live
-    // in $TMPDIR; the workspace root below is more specific and stays readable.
+    // The minimal set leaves /tmp readable. The snapshot lives in a private
+    // cache directory (see workdir.ts), so denying both temp roots is safe.
     '":slash_tmp" = "deny"',
     '":tmpdir" = "deny"',
     ...installs.map((dir) => `${JSON.stringify(dir)} = "read"`),
@@ -75,8 +76,27 @@ export function snapshotPermissionProfile(codexExecutable?: string): string {
 // mkdtempSync creates a 0700 directory atomically (and refuses if the
 // target already exists), which closes the symlink-clobber race a
 // pre-creating local attacker would otherwise win.
+const STALE_HOME_MS = 24 * 60 * 60 * 1000;
+
+// A run killed with SIGKILL cannot remove its home, which links to the user's
+// Codex login. No run lasts a day, so homes older than that are leftovers.
+function removeStaleCodexHomes(): void {
+  try {
+    for (const name of fs.readdirSync(workRoot())) {
+      if (!name.startsWith("codex-home-")) continue;
+      const dir = path.join(workRoot(), name);
+      const stat = fs.lstatSync(dir);
+      if (stat.isDirectory() && Date.now() - stat.mtimeMs > STALE_HOME_MS)
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    // Best effort: a sweep failure must never block a run.
+  }
+}
+
 function makeCodexHome(): string {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
+  removeStaleCodexHomes();
+  const home = makeWorkDir("codex-home-");
   fs.writeFileSync(
     path.join(home, "config.toml"),
     snapshotPermissionProfile(findAgentExecutable("codex")),

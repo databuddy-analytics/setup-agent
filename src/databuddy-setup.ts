@@ -1,7 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { runSetupTask } from "./agents/run-task.js";
@@ -36,6 +35,7 @@ import {
 } from "./schema.js";
 import { createRepositoryTaskRunner } from "./task-execution.js";
 import { createSetupRedactor } from "./terminal.js";
+import { makeWorkDir } from "./workdir.js";
 
 interface DatabuddySetupOptions {
   repository: string;
@@ -732,7 +732,7 @@ export async function runDatabuddySetup(
         );
       // Missing or invalid planning checkpoints are rebuilt, never treated as completed work.
     }
-    temporary = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-source-"));
+    temporary = makeWorkDir("databuddy-source-");
     const gitDir = path.join(temporary, "index");
     execFileSync("git", ["init", "--bare", "--quiet", "--template=", gitDir], { stdio: "pipe" });
     const readCurrent = () => readSource(repository, sourceFiles(repository, gitDir));
