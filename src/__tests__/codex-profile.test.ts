@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertCodexVersion,
   codexInstallPaths,
+  mirrorCodexAuthJson,
   snapshotPermissionProfile,
 } from "../agents/codex.js";
 
@@ -55,5 +56,20 @@ describe("Codex permission profile", () => {
     expect(() => assertCodexVersion("/odd/codex", version("codex"))).toThrow("unknown version");
     expect(() => assertCodexVersion("/new/codex", version("codex-cli 0.163.0"))).not.toThrow();
     expect(() => assertCodexVersion("/next/codex", version("codex-cli 1.2.0"))).not.toThrow();
+  });
+
+  it("links the login once and reuses the link when a task resumes in the same home", () => {
+    const user = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-user-codex-"));
+    fs.writeFileSync(path.join(user, "auth.json"), '{"synthetic":true}');
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "databuddy-codex-home-"));
+    mirrorCodexAuthJson(user, home);
+    mirrorCodexAuthJson(user, home);
+    expect(fs.readlinkSync(path.join(home, "auth.json"))).toBe(path.join(user, "auth.json"));
+    // A stale file in its place is replaced, and the user's login is untouched.
+    fs.rmSync(path.join(home, "auth.json"));
+    fs.writeFileSync(path.join(home, "auth.json"), "stale");
+    mirrorCodexAuthJson(user, home);
+    expect(fs.readlinkSync(path.join(home, "auth.json"))).toBe(path.join(user, "auth.json"));
+    expect(fs.readFileSync(path.join(user, "auth.json"), "utf8")).toBe('{"synthetic":true}');
   });
 });

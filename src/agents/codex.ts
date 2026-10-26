@@ -141,11 +141,18 @@ function findCodexSubscriptionAuth(): string | null {
  * `model_provider = "..."` could conflict with our defaults, and we
  * specifically want the built-in `openai` provider in subscription mode.
  */
-function mirrorCodexAuthJson(userCodexHome: string, codexHome: string): void {
+export function mirrorCodexAuthJson(userCodexHome: string, codexHome: string): void {
   const src = path.join(userCodexHome, "auth.json");
   const dst = path.join(codexHome, "auth.json");
   // A link, never a copy: a copy of the login would outlive a killed run.
+  // A repair or resumed task reuses its home, where the link already exists.
   try {
+    if (fs.readlinkSync(dst) === src) return;
+  } catch {
+    // Not a link yet.
+  }
+  try {
+    fs.rmSync(dst, { force: true });
     fs.symlinkSync(src, dst);
   } catch (error) {
     throw new Error(
