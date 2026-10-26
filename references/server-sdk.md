@@ -136,6 +136,17 @@ Stripe does not copy PaymentIntent metadata onto future subscription invoices â€
 1. `bun add @databuddy/sdk` (or npm/pnpm equivalent for the customer's package manager).
 2. Create one client per process: `new Databuddy({ apiKey: process.env.DATABUDDY_API_KEY! })`, scoping `websiteId`/`namespace`/`source` at construction when the app only ever writes to one site.
 3. Call `track()` at the point of the server-side action; pass through `anonymousId`/`sessionId` captured from the browser via `getTrackingIds()` when attribution matters â€” never mint new session IDs server-side.
+
+   When the browser starts the action, carry its IDs to the server with the request. `anonId` from `getTrackingIds()` becomes `anonymousId` on `track()`, and `sessionId` stays `sessionId`. Anonymous and session IDs are safe to send from the client; API keys stay on the server.
+
+   | Flow | How the IDs reach the server |
+   | --- | --- |
+   | Browser `fetch` to an API route | Send `anonId` and `sessionId` in the JSON body |
+   | Form post or Next.js server action | Pass them as an extra optional argument, or fill hidden fields from `getTrackingIds()` before submit |
+   | Redirect to another domain you own | Append `getTrackingParams()` to the URL and install Databuddy on the destination |
+   | Async job a user started | Store both IDs with the job record and reuse them when it completes or fails |
+   | Webhook after a user's setup | Store the IDs during setup and reuse them when the webhook can be tied back to that user |
+   | Pure server event (cron, system webhook) | Omit both IDs; set `source` and operational properties instead |
 4. In serverless/short-lived runtimes, `await client.flush()` before the handler returns (also in `SIGTERM`/`finally` handlers for long-lived processes).
 5. For revenue, generate the provider webhook URL in Revenue settings and attach `databuddy_*` metadata on PaymentIntents/Subscriptions (Stripe) or `customData` (Paddle) at checkout creation.
 6. Use `identify()` only after establishing the user's stable ID, passing the browser's `anonymousId` to link pre-login activity.

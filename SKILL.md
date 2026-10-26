@@ -39,9 +39,9 @@ npx @databuddy/setup-agent@^0.1.2 setup /path/to/next-app \
   --journey "A new user signs up and creates their first project"
 ```
 
-The default backend is Codex, authentication is `local`, and reasoning
-is `medium`. Use an existing machine login. `--agent claude` selects Claude
-Code, and `--model-auth api-key` bills an API key instead; see
+The default backend is Claude Code, authentication is `local`, and reasoning
+is `medium`. Use an existing machine login. `--agent codex` selects Codex,
+and `--model-auth api-key` bills an API key instead; see
 [models](docs/models.md).
 Do not print credential values or assume that a paid route is authorized
 because its key happens to exist in the environment.

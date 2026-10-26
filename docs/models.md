@@ -5,8 +5,8 @@ description: Choose the Databuddy setup agent backend, model, reasoning effort, 
 
 # Models and credentials
 
-The setup agent runs each task through Codex or Claude Code. The default
-backend is `codex`, the default credential route is `local`, and the default
+The setup agent runs each task through Claude Code or Codex. The default
+backend is `claude`, the default credential route is `local`, and the default
 reasoning effort is `medium`. Choose a model with `--model`; the identifier
 must be one the selected backend accepts.
 
@@ -14,8 +14,14 @@ must be one the selected backend accepts.
 npx @databuddy/setup-agent setup /path/to/next-app \
   --website website_id \
   --journey "A new user signs up" \
-  --agent claude --thinking-level high
+  --agent codex
 ```
+
+Claude is the default because it did best on our setup benchmark. Across
+`setup --patch` runs on two open-source Next.js apps it passed independent
+review on the first round every time, in about two minutes, with patches that
+only added code. Codex converged too, usually in two or three rounds and five
+to nine minutes, at a similar cost.
 
 | Backend | Default model | Local login | API key |
 | --- | --- | --- | --- |

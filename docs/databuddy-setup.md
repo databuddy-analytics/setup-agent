@@ -128,8 +128,8 @@ when the product changes.
 
 ## Select a model route
 
-The default backend is Codex with your existing `codex login`, at `medium`
-reasoning effort. Use `--agent claude` for Claude Code, `--model` for another
+The default backend is Claude Code with your existing login, at `medium`
+reasoning effort. Use `--agent codex` for Codex, `--model` for another
 model, and `--model-auth api-key` to bill `OPENAI_API_KEY` or
 `ANTHROPIC_API_KEY` directly instead of a subscription. See
 [models](models.md) for defaults and the checks each route runs.

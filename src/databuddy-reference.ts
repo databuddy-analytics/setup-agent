@@ -28,7 +28,7 @@ const TOPIC_SUMMARY: Record<DatabuddyReferenceTopic, string> = {
   privacy:
     "cookieless model, visitor anonymization, bot detection, GDPR, what is and is not stored, event scanner",
   "server-sdk":
-    "Node SDK: constructor, track input shape, flush, events ingestion endpoint, API keys and scopes, revenue/payments, failure isolation",
+    "Node SDK: constructor, track input shape, flush, events ingestion endpoint, API keys and scopes, carrying browser anonymous and session IDs into server events, revenue/payments, failure isolation",
   "feature-flags":
     "client and server flag evaluation, hooks, rollout and targeting, public flags endpoints, caching and identity, creating flags through MCP",
   "query-api":

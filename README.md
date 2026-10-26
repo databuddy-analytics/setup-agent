@@ -189,8 +189,8 @@ npx @databuddy/setup-agent feedback "Apply stopped after the SDK install" \
 
 ## Models and privacy
 
-The default backend is Codex at `medium` reasoning effort using your local
-login. `--agent claude` switches to Claude Code, and `--model-auth api-key`
+The default backend is Claude Code at `medium` reasoning effort using your
+local login. `--agent codex` switches to Codex, and `--model-auth api-key`
 bills `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` instead of a subscription.
 [Models](docs/models.md) lists the defaults and credential checks.
 

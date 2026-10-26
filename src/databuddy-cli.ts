@@ -112,7 +112,7 @@ function collectRepeatable(value: string, previous: string[] = []): string[] {
 
 function addAgentOptions(command: Command): Command {
   return command
-    .addOption(new Option("--agent <backend>", "Agent backend").choices(AGENTS).default("codex"))
+    .addOption(new Option("--agent <backend>", "Agent backend").choices(AGENTS).default("claude"))
     .option("--model <id>", "Model ID accepted by the selected backend")
     .addOption(
       new Option("--thinking-level <level>", "Reasoning effort")

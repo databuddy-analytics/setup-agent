@@ -93,7 +93,16 @@ describe("bundle e2e", () => {
       };
       expect(runBundle(["--help"], options).stdout).toContain("databuddy");
       const result = runBundle(
-        ["setup", repository, "--website", request.websiteId, "--journey", request.journey],
+        [
+          "setup",
+          repository,
+          "--agent",
+          "codex",
+          "--website",
+          request.websiteId,
+          "--journey",
+          request.journey,
+        ],
         options,
       );
       expect(result.status, result.stderr).toBe(0);
@@ -212,6 +221,8 @@ fs.writeFileSync(path.join(sdk, "package.json"), JSON.stringify({name:"@databudd
       const args = [
         "setup",
         repository,
+        "--agent",
+        "codex",
         "--website",
         request.websiteId,
         "--journey",
@@ -330,7 +341,16 @@ fs.writeFileSync(path.join(sdk, "package.json"), JSON.stringify({name:"@databudd
         cwd: repository,
         env: { OPENAI_API_KEY: "synthetic-cache-miss-guard" },
       };
-      const args = ["diagnose", repository, "--question", request.question, "--scope", "src"];
+      const args = [
+        "diagnose",
+        repository,
+        "--agent",
+        "codex",
+        "--question",
+        request.question,
+        "--scope",
+        "src",
+      ];
       const blocked = runBundle(args, cliOptions);
       expect(blocked.status).toBe(1);
       expect(fs.readFileSync(stateFile, "utf8")).toBe(saved);
