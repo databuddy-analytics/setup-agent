@@ -127,7 +127,7 @@ function addAgentOptions(command: Command): Command {
         .choices(MODEL_AUTH)
         .default("local"),
     )
-    .option("--timeout <seconds>", "Deadline in seconds, from 1 to 3600", parseTimeout, 600)
+    .option("--timeout <seconds>", "Deadline in seconds, from 1 to 3600", parseTimeout, 1200)
     .option(
       "--max-cost-usd <n>",
       "Stop before further tasks when estimated invocation cost reaches this amount",

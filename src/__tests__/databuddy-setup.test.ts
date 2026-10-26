@@ -1,12 +1,16 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  diffHunks,
   enforceHunkReview,
   missingPlannedEvents,
+  onlyUnrelatedHunks,
   runDatabuddySetup,
   sdkInstallCommand,
+  withoutHunks,
 } from "../databuddy-setup.js";
 import type {
   DatabuddySetupChanges,
@@ -658,6 +662,47 @@ describe("Databuddy setup implementation", () => {
     expect(resumed).toEqual(result);
   });
 
+  it("drops a hunk rejected only as unrelated and re-reviews without a new implementation", async () => {
+    const repository = fixture();
+    const calls = { implementation: 0, review: 0 };
+    const runTask: RunTask = async ({ prompt }) => {
+      if (prompt.startsWith("Generate the smallest")) {
+        calls.implementation++;
+        return JSON.stringify(implementation());
+      }
+      if (prompt.startsWith("Independently verify")) {
+        calls.review++;
+        if (calls.review > 1) return JSON.stringify(sourceReview());
+        const hunks = [...prompt.matchAll(/(H\d+) ([^\s,]+):(\d+)/g)];
+        const layout = hunks.find((hunk) => hunk[2] === "app/layout.tsx");
+        if (!layout) throw new Error("expected a layout hunk");
+        return JSON.stringify({
+          passed: false,
+          issues: [`app/layout.tsx:${layout[3]}: this change is unrelated to the plan`],
+          unknowns: [],
+          hunks: hunks.map((hunk) => ({
+            id: hunk[1],
+            related: hunk[1] !== layout[1],
+            purpose: "test",
+          })),
+        });
+      }
+      return JSON.stringify(plan());
+    };
+    const patched = await runDatabuddySetup({
+      repository,
+      request,
+      apply: true,
+      patchOnly: true,
+      runTask,
+    });
+    expect(calls).toEqual({ implementation: 1, review: 2 });
+    const patch = fs.readFileSync(path.join(repository, ".databuddy/setup.patch"), "utf8");
+    expect(patch).not.toContain("app/layout.tsx");
+    expect(patch).toContain("app/actions.ts");
+    expect(patched.patch?.files).toBe(implementation().changes.length - 1);
+  });
+
   it("saves a reviewed patch without installing or writing, then applies it without model calls", async () => {
     const repository = fixture();
     const actionsBefore = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
@@ -1253,14 +1298,128 @@ describe("source review hunk accounting", () => {
         ],
       },
       [
-        { id: "H1", location: "app/layout.tsx:34" },
-        { id: "H2", location: "components/cart/modal.tsx:72" },
+        {
+          id: "H1",
+          location: "app/layout.tsx:34",
+          file: "app/layout.tsx",
+          oldStart: 31,
+          oldCount: 6,
+          newStart: 34,
+          newCount: 7,
+        },
+        {
+          id: "H2",
+          location: "components/cart/modal.tsx:72",
+          file: "components/cart/modal.tsx",
+          oldStart: 72,
+          oldCount: 3,
+          newStart: 72,
+          newCount: 3,
+        },
       ],
     );
     expect(review.passed).toBe(false);
     expect(review.issues).toEqual([
       "components/cart/modal.tsx:72: remove this change; the requested setup does not need it (adds backdrop-blur-none to the cart modal)",
     ]);
+  });
+
+  it("rejects a related hunk that changes what the app does", () => {
+    const review = enforceHunkReview(
+      {
+        passed: true,
+        issues: [],
+        unknowns: [],
+        hunks: [
+          {
+            id: "H1",
+            related: true,
+            changesBehavior: true,
+            purpose: "returns the checkout URL instead of redirecting so the client can track",
+          },
+        ],
+      },
+      [
+        {
+          id: "H1",
+          location: "components/cart/actions.ts:101",
+          file: "components/cart/actions.ts",
+          oldStart: 97,
+          oldCount: 7,
+          newStart: 100,
+          newCount: 14,
+        },
+      ],
+    );
+    expect(review.passed).toBe(false);
+    expect(review.issues[0]).toContain(
+      "components/cart/actions.ts:101: keep the app's existing behavior",
+    );
+  });
+});
+
+describe("stray edit recovery", () => {
+  const original = `${Array.from({ length: 30 }, (_, index) => `const line${index} = ${index};`).join("\n")}\n`;
+  const candidate = original
+    .replace("const line3 = 3;", 'const line3 = 3;\ntrack("cart_opened");')
+    .replace("const line25 = 25;", "const line25 = 25 ;");
+  function hunksFor(before: string, after: string) {
+    const root = fixture();
+    write(root, "a/modal.tsx", before);
+    write(root, "b/modal.tsx", after);
+    const diff = (() => {
+      try {
+        return execFileSync(
+          "git",
+          ["diff", "--no-index", "--no-color", "a/modal.tsx", "b/modal.tsx"],
+          { cwd: root, encoding: "utf8" },
+        );
+      } catch (error) {
+        return (error as { stdout: string }).stdout;
+      }
+    })();
+    return diffHunks(
+      diff.replaceAll("a/a/modal.tsx", "a/modal.tsx").replaceAll("b/b/modal.tsx", "b/modal.tsx"),
+    );
+  }
+
+  it("reverts only the hunks a review rejected as unrelated and keeps the tracking", () => {
+    const hunks = hunksFor(original, candidate);
+    expect(hunks.map((hunk) => hunk.file)).toEqual(["modal.tsx", "modal.tsx"]);
+    const review = {
+      passed: false,
+      issues: [`modal.tsx:${hunks[1].newStart + 3}: the spacing change is unrelated to tracking`],
+      unknowns: [],
+      hunks: [
+        { id: "H1", related: true, purpose: "tracks cart_opened" },
+        { id: "H2", related: false, purpose: "reformats line25" },
+      ],
+    };
+    const strip = onlyUnrelatedHunks(review, hunks);
+    expect(strip?.map((hunk) => hunk.id)).toEqual(["H2"]);
+    const [kept] = withoutHunks(
+      [{ product: "events", path: "modal.tsx", content: candidate, beforeHash: null }],
+      new Map([["modal.tsx", original]]),
+      strip ?? [],
+    );
+    expect(kept.content).toBe(candidate.replace("const line25 = 25 ;", "const line25 = 25;"));
+  });
+
+  it("leaves a rejection with any other issue to a new implementation", () => {
+    const hunks = hunksFor(original, candidate);
+    const review = {
+      passed: false,
+      issues: [
+        `modal.tsx:${hunks[1].newStart + 3}: unrelated spacing`,
+        "modal.tsx:4: cart_opened fires before the cart opens",
+      ],
+      unknowns: [],
+      hunks: [
+        { id: "H1", related: true, purpose: "tracks cart_opened" },
+        { id: "H2", related: false, purpose: "reformats line25" },
+      ],
+    };
+    expect(onlyUnrelatedHunks(review, hunks)).toBeUndefined();
   });
 });
 

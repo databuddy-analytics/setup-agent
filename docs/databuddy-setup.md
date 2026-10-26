@@ -139,7 +139,7 @@ configuration. Help does not refresh model credentials. Credential checks
 run only when a new agent task is needed, so an unchanged cached plan can be
 returned without model credentials or another model call.
 
-`--timeout` sets a deadline in seconds, from 1 to 3600; the default is 600.
+`--timeout` sets a deadline in seconds, from 1 to 3600; the default is 1200, enough for planning and three implementation and review rounds on a mid-sized app.
 Cancellation and the deadline abort the agent task. The command exits
 nonzero on failure and prints a redacted error to stderr. `--max-cost-usd`
 stops further model calls when reported estimated cost reaches the limit;

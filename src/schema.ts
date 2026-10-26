@@ -201,6 +201,8 @@ export const DatabuddySetupSourceReviewSchema = z
         z.object({
           id: z.string().regex(/^H\d{1,4}$/),
           related: z.boolean(),
+          // Whether the hunk changes what the app does apart from sending analytics.
+          changesBehavior: z.boolean().optional(),
           purpose: z.string().trim().min(1).max(500),
         }),
       )

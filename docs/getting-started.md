@@ -59,5 +59,5 @@ returned without another model call; changed requests, model configuration,
 or inspected source require replanning.
 
 Before running, review the snapshot exclusions and secret-detection limits
-in [setup planning](databuddy-setup.md). The default deadline is 600 seconds;
+in [setup planning](databuddy-setup.md). The default deadline is 1200 seconds;
 `--timeout` accepts 1 to 3600 seconds.
