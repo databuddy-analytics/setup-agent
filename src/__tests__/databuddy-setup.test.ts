@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   diffHunks,
   enforceHunkReview,
+  isEditablePath,
+  materializeEdits,
   missingPlannedEvents,
   onlyUnrelatedHunks,
   runDatabuddySetup,
@@ -660,6 +662,45 @@ describe("Databuddy setup implementation", () => {
       },
     });
     expect(resumed).toEqual(result);
+  });
+
+  it("builds the reviewed patch from find/replace edits to existing files", async () => {
+    const repository = fixture();
+    const actions = fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8");
+    const full = implementation();
+    const runTask: RunTask = async ({ prompt }) => {
+      if (prompt.startsWith("Generate the smallest"))
+        return JSON.stringify({
+          changes: full.changes.map((change) =>
+            fs.existsSync(path.join(repository, change.path))
+              ? {
+                  product: change.product,
+                  path: change.path,
+                  edits: [
+                    {
+                      find: fs.readFileSync(path.join(repository, change.path), "utf8"),
+                      replace: change.content,
+                    },
+                  ],
+                }
+              : change,
+          ),
+        });
+      if (prompt.startsWith("Independently verify")) return JSON.stringify(sourceReview());
+      return JSON.stringify(plan());
+    };
+    const patched = await runDatabuddySetup({
+      repository,
+      request,
+      apply: true,
+      patchOnly: true,
+      runTask,
+    });
+    expect(patched.patch?.files).toBe(full.changes.length);
+    expect(fs.readFileSync(path.join(repository, ".databuddy/setup.patch"), "utf8")).toContain(
+      "signup_completed",
+    );
+    expect(fs.readFileSync(path.join(repository, "app/actions.ts"), "utf8")).toBe(actions);
   });
 
   it("drops a hunk rejected only as unrelated and re-reviews without a new implementation", async () => {
@@ -1355,6 +1396,56 @@ describe("source review hunk accounting", () => {
     expect(review.issues[0]).toContain(
       "components/cart/actions.ts:101: keep the app's existing behavior",
     );
+  });
+});
+
+describe("implementation edits", () => {
+  const contents = new Map([["app/actions.ts", "const a = 1;\nconst b = 2;\nconst a2 = 1;\n"]]);
+  const proposal = (edits: unknown) => ({
+    changes: [{ product: "events", path: "app/actions.ts", edits }],
+  });
+
+  it("applies exact, unique excerpts in order and keeps the rest of the file", () => {
+    const value = materializeEdits(
+      proposal([
+        { find: "const b = 2;", replace: 'const b = 2;\ntrack("b_set");' },
+        { find: 'track("b_set");', replace: 'track("b_set", { source: "test" });' },
+      ]),
+      contents,
+    ) as { changes: { content: string }[] };
+    expect(value.changes[0].content).toBe(
+      'const a = 1;\nconst b = 2;\ntrack("b_set", { source: "test" });\nconst a2 = 1;\n',
+    );
+  });
+
+  it("refuses an excerpt that is missing, ambiguous, or aimed at a new file", () => {
+    expect(() =>
+      materializeEdits(proposal([{ find: "const c = 3;", replace: "" }]), contents),
+    ).toThrow("does not appear");
+    // A mistyped line is answered with the file's real lines to copy.
+    expect(() =>
+      materializeEdits(proposal([{ find: "const a = 1;\nconst b = 3;", replace: "" }]), contents),
+    ).toThrow('from line 1, are: "const a = 1;\\nconst b = 2;"');
+    expect(() => materializeEdits(proposal([{ find: "= 1;", replace: "= 9;" }]), contents)).toThrow(
+      "more than once",
+    );
+    expect(() =>
+      materializeEdits(
+        {
+          changes: [
+            { product: "events", path: "app/new.ts", edits: [{ find: "x", replace: "y" }] },
+          ],
+        },
+        contents,
+      ),
+    ).toThrow("only to existing files");
+  });
+
+  it("treats only root and workspace tooling folders as build tooling", () => {
+    expect(isEditablePath("src/lib/agents/tools/lead-tools.ts")).toBe(true);
+    expect(isEditablePath("tools/build.ts")).toBe(false);
+    expect(isEditablePath("packages/sdk/scripts/release.ts")).toBe(false);
+    expect(isEditablePath("next.config.ts")).toBe(false);
   });
 });
 
