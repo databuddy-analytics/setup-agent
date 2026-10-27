@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@databuddy/scan':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.1.4
+        version: 0.1.4
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.280
@@ -963,8 +963,8 @@ packages:
       sisteransi: 1.0.5
     dev: false
 
-  /@databuddy/scan@0.1.3:
-    resolution: {integrity: sha512-CjmkJI43hn629bW6NbRRXXW9T53xKBgdyHtI1wYNN/US6Y8nRvxKhf70nuEGMaaZs3soLimj87aKr9xAyDBrPQ==}
+  /@databuddy/scan@0.1.4:
+    resolution: {integrity: sha512-I8GEaxYnrJrcAycAOFrZuQBsoV0igovApsKOgYc9qXaDXmG5QyDOSpQHxqtNouY7cOn5LGdFZz0Gi/GJxlI72g==}
     engines: {node: '>=22'}
     hasBin: true
     dev: false

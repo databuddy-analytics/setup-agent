@@ -83,16 +83,16 @@ Databuddy:
 - Set `AI_GATEWAY_API_KEY` in your shell to send the code to your own Vercel AI
   Gateway account instead, and Databuddy receives nothing. A key in the
   repository's `.env` is not used, because the scanner never sees that file.
-- `npx @databuddy/scan@0.1.3 --dry-run` lists what would be sent without
+- `npx @databuddy/scan@0.1.4 --dry-run` lists what would be sent without
   sending anything. Run in your checkout, it shows a little more than the agent
   sends, since the agent scans only its redacted snapshot. Results are cached in `~/.cache/databuddy/scan`.
 - The scanner is an exact dependency of this package (or `--scan-bin`), so
   nothing is downloaded at run time. `setup` and `diagnose` never run it.
 - Its source is public at
   [databuddy-analytics/scan](https://github.com/databuddy-analytics/scan);
-  `src/evaluate.ts` there builds every request it sends. The pinned 0.1.3 was
-  built before that repository existed, so it cannot be rebuilt from it; later
-  releases are published from it with npm provenance and an unminified bundle.
+  `src/evaluate.ts` there builds every request it sends. The pinned 0.1.4 ships
+  an unminified bundle that is byte-identical to `bun run bundle` at the
+  repository's `v0.1.4` tag, so you can rebuild it and compare.
 
 [How the scanner handles your code](https://www.databuddy.cc/docs/privacy/event-scanner).
 
